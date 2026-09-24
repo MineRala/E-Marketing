@@ -7,14 +7,14 @@ import Foundation
 
 protocol APIClientProtocol: Sendable {
     func request<T: Decodable>(
-        _ request: URLRequest,
+        _ urlRequest: URLRequest,
         authenticated: Bool
     ) async throws -> T
 }
 
 extension APIClientProtocol {
-    func request<T: Decodable>(_ request: URLRequest) async throws -> T {
-        try await request(request, authenticated: true)
+    func request<T: Decodable>(_ urlRequest: URLRequest) async throws -> T {
+        try await self.request(urlRequest, authenticated: true)
     }
 }
 
@@ -35,16 +35,16 @@ final class APIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func request<T: Decodable>(
-        _ request: URLRequest,
+        _ urlRequest: URLRequest,
         authenticated: Bool
     ) async throws -> T {
         try Task.checkCancellation()
 
         let outgoingRequest: URLRequest
         if authenticated {
-            outgoingRequest = try interceptor.adapt(request)
+            outgoingRequest = try interceptor.adapt(urlRequest)
         } else {
-            outgoingRequest = request
+            outgoingRequest = urlRequest
         }
 
         let data: Data

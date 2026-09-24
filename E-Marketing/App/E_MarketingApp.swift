@@ -2,16 +2,19 @@
 //  E_MarketingApp.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import SwiftUI
 
 @main
 struct E_MarketingApp: App {
+
+    private let container = AppContainer()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView(
+                container: container
+            )
         }
     }
 }

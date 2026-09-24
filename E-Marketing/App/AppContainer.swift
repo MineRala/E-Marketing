@@ -19,7 +19,9 @@ final class AppContainer {
         self.keychainService = KeychainService()
 
         self.apiClient = APIClient(
-            keychain: keychainService
+            interceptor: AuthRequestInterceptor(
+                keychain: keychainService
+            )
         )
 
         self.authRepository = AuthRepository(

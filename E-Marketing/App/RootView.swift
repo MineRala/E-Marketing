@@ -28,7 +28,9 @@ struct RootView: View {
         ZStack {
 
             if viewModel.isAuthenticated {
-                HomeView()
+                HomeView {
+                    viewModel.logout()
+                }
             } else {
                 AuthenticationView(
                     viewModel: viewModel

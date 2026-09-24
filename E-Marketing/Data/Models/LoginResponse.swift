@@ -17,3 +17,14 @@ struct LoginResponse: Decodable {
     let accessToken: String
     let refreshToken: String
 }
+
+extension LoginResponse: CustomStringConvertible, CustomDebugStringConvertible {
+
+    var description: String {
+        "LoginResponse(id: \(id), username: \(username), email: \(email))"
+    }
+
+    var debugDescription: String {
+        description
+    }
+}

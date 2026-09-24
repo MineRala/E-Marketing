@@ -20,7 +20,7 @@ protocol KeychainServiceProtocol {
 
 final class KeychainService: KeychainServiceProtocol {
 
-    private let service = "com.example.MyApp"
+    private let service = "com.MineRala.E-Marketing"
 
     func save(_ value: String, forKey key: String) throws {
 
@@ -39,6 +39,9 @@ final class KeychainService: KeychainServiceProtocol {
 
             kSecAttrAccount as String:
                 key,
+
+            kSecAttrAccessible as String:
+                kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
 
             kSecValueData as String:
                 data

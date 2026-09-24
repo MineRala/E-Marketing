@@ -27,7 +27,5 @@ struct HomeView: View {
 }
 
 #Preview {
-    HomeView {
-        print("Logout")
-    }
+    HomeView {}
 }

@@ -12,8 +12,6 @@ final class AuthRepository: AuthRepositoryProtocol {
     private let apiClient: APIClientProtocol
     private let keychain: KeychainServiceProtocol
 
-    private let tokenKey = "accessToken"
-
     init(apiClient: APIClientProtocol, keychain: KeychainServiceProtocol) {
         self.apiClient = apiClient
         self.keychain = keychain
@@ -47,12 +45,13 @@ final class AuthRepository: AuthRepositoryProtocol {
 
         let response: LoginResponse =
             try await apiClient.request(
-                request
+                request,
+                authenticated: false
             )
 
         try keychain.save(
             response.accessToken,
-            forKey: tokenKey
+            forKey: AuthStorageKey.accessToken
         )
 
         return response
@@ -61,14 +60,14 @@ final class AuthRepository: AuthRepositoryProtocol {
     func getAccessToken() throws -> String? {
 
         try keychain.get(
-            forKey: tokenKey
+            forKey: AuthStorageKey.accessToken
         )
     }
 
     func logout() throws {
 
         try keychain.delete(
-            forKey: tokenKey
+            forKey: AuthStorageKey.accessToken
         )
     }
 }

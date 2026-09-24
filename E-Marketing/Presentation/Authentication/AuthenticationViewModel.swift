@@ -88,6 +88,8 @@ final class AuthenticationViewModel: ObservableObject {
     func logout() {
         do {
             try repository.logout()
+            username = ""
+            password = ""
             isAuthenticated = false
 
         } catch {

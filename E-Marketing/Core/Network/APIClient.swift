@@ -8,42 +8,42 @@
 import Foundation
 
 protocol APIClientProtocol {
-    func request<T: Decodable>(_ request: URLRequest ) async throws -> T
+    func request<T: Decodable>(
+        _ request: URLRequest,
+        authenticated: Bool
+    ) async throws -> T
+}
+
+extension APIClientProtocol {
+    func request<T: Decodable>(_ request: URLRequest) async throws -> T {
+        try await self.request(request, authenticated: true)
+    }
 }
 
 final class APIClient: APIClientProtocol {
 
-    private let keychain: KeychainServiceProtocol
+    private let interceptor: RequestInterceptor
 
-    private let tokenKey = "accessToken"
-
-    init(
-        keychain: KeychainServiceProtocol
-    ) {
-        self.keychain = keychain
+    init(interceptor: RequestInterceptor) {
+        self.interceptor = interceptor
     }
 
     func request<T: Decodable>(
-        _ request: URLRequest
+        _ request: URLRequest,
+        authenticated: Bool
     ) async throws -> T {
 
-        var authenticatedRequest = request
-
-        if let token = try keychain.get(
-            forKey: tokenKey
-        ),
-        !token.isEmpty {
-
-            authenticatedRequest.setValue(
-                "Bearer \(token)",
-                forHTTPHeaderField: "Authorization"
-            )
+        let outgoingRequest: URLRequest
+        if authenticated {
+            outgoingRequest = try interceptor.adapt(request)
+        } else {
+            outgoingRequest = request
         }
 
         do {
             let (data, response) =
                 try await URLSession.shared.data(
-                    for: authenticatedRequest
+                    for: outgoingRequest
                 )
 
             guard let httpResponse =

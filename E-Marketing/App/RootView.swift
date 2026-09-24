@@ -2,57 +2,51 @@
 //  RootView.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import SwiftUI
 
 struct RootView: View {
 
-    private let container: AppContainer
+    @ObservedObject var session: SessionStore
+    @ObservedObject var toastManager: ToastManager
+    @StateObject private var authenticationViewModel: AuthenticationViewModel
 
-    @StateObject private var viewModel: AuthenticationViewModel
-
-    init(container: AppContainer) {
-        self.container = container
-
-        _viewModel = StateObject(
+    init(
+        session: SessionStore,
+        toastManager: ToastManager,
+        authRepository: AuthRepositoryProtocol
+    ) {
+        _session = ObservedObject(wrappedValue: session)
+        _toastManager = ObservedObject(wrappedValue: toastManager)
+        _authenticationViewModel = StateObject(
             wrappedValue: AuthenticationViewModel(
-                repository: container.authRepository,
-                toastManager: container.toastManager
+                repository: authRepository,
+                session: session,
+                toastManager: toastManager
             )
         )
     }
 
     var body: some View {
         ZStack {
-
-            if viewModel.isAuthenticated {
+            if session.isAuthenticated {
                 HomeView {
-                    viewModel.logout()
+                    session.logout()
                 }
             } else {
-                AuthenticationView(
-                    viewModel: viewModel
-                )
+                AuthenticationView(viewModel: authenticationViewModel)
             }
 
-            if let toast = container.toastManager.toast {
+            if let toast = toastManager.toast {
                 VStack {
                     Spacer()
-
                     ToastView(toast: toast)
                         .padding(.bottom, 30)
-                        .transition(
-                            .move(edge: .bottom)
-                                .combined(with: .opacity)
-                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
-        .animation(
-            .easeInOut(duration: 0.3),
-            value: viewModel.isAuthenticated
-        )
+        .animation(.easeInOut(duration: 0.3), value: session.isAuthenticated)
+        .animation(.easeInOut(duration: 0.25), value: toastManager.toast)
     }
 }

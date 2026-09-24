@@ -13,7 +13,9 @@ struct E_MarketingApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(
-                container: container
+                session: container.session,
+                toastManager: container.toastManager,
+                authRepository: container.authRepository
             )
         }
     }

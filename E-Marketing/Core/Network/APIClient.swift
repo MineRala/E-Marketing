@@ -2,12 +2,10 @@
 //  APIClient.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import Foundation
 
-protocol APIClientProtocol {
+protocol APIClientProtocol: Sendable {
     func request<T: Decodable>(
         _ request: URLRequest,
         authenticated: Bool
@@ -16,22 +14,31 @@ protocol APIClientProtocol {
 
 extension APIClientProtocol {
     func request<T: Decodable>(_ request: URLRequest) async throws -> T {
-        try await self.request(request, authenticated: true)
+        try await request(request, authenticated: true)
     }
 }
 
-final class APIClient: APIClientProtocol {
+final class APIClient: APIClientProtocol, @unchecked Sendable {
 
-    private let interceptor: RequestInterceptor
+    private let interceptor: any RequestInterceptor
+    private let session: any HTTPDataLoading
+    private let onUnauthorized: @Sendable () -> Void
 
-    init(interceptor: RequestInterceptor) {
+    init(
+        interceptor: any RequestInterceptor,
+        session: any HTTPDataLoading,
+        onUnauthorized: @escaping @Sendable () -> Void
+    ) {
         self.interceptor = interceptor
+        self.session = session
+        self.onUnauthorized = onUnauthorized
     }
 
     func request<T: Decodable>(
         _ request: URLRequest,
         authenticated: Bool
     ) async throws -> T {
+        try Task.checkCancellation()
 
         let outgoingRequest: URLRequest
         if authenticated {
@@ -40,44 +47,42 @@ final class APIClient: APIClientProtocol {
             outgoingRequest = request
         }
 
+        let data: Data
+        let response: URLResponse
+
         do {
-            let (data, response) =
-                try await URLSession.shared.data(
-                    for: outgoingRequest
-                )
-
-            guard let httpResponse =
-                    response as? HTTPURLResponse
-            else {
-                throw AppError.invalidResponse
-            }
-
-            switch httpResponse.statusCode {
-
-            case 200...299:
-                break
-
-            case 401, 403:
-                throw AppError.invalidCredentials
-
-            default:
-                throw AppError.invalidResponse
-            }
-
-            do {
-                return try JSONDecoder().decode(
-                    T.self,
-                    from: data
-                )
-            } catch {
-                throw AppError.decoding
-            }
-
-        } catch let error as AppError {
-            throw error
-
+            (data, response) = try await session.data(for: outgoingRequest)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            throw CancellationError()
         } catch {
-            throw AppError.network
+            throw NetworkErrorMapper.map(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.invalidResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let mapped = NetworkErrorMapper.map(
+                statusCode: httpResponse.statusCode,
+                authenticated: authenticated
+            )
+
+            if mapped == .unauthorized {
+                onUnauthorized()
+            }
+
+            throw mapped
+        }
+
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw AppError.decoding
         }
     }
 }

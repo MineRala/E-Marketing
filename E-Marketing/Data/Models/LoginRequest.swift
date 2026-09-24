@@ -2,13 +2,17 @@
 //  LoginRequest.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import Foundation
 
 struct LoginRequest: Encodable {
-
     let username: String
     let password: String
+    let expiresInMins: Int
+
+    init(username: String, password: String, expiresInMins: Int = 30) {
+        self.username = username
+        self.password = password
+        self.expiresInMins = expiresInMins
+    }
 }

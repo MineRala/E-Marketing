@@ -2,17 +2,15 @@
 //  AuthRequestInterceptor.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import Foundation
 
-protocol RequestInterceptor {
+protocol RequestInterceptor: Sendable {
     func adapt(_ request: URLRequest) throws -> URLRequest
 }
 
-/// Adds `Authorization: Bearer` from Keychain. Token is never logged.
-final class AuthRequestInterceptor: RequestInterceptor {
+/// Attaches `Authorization: Bearer` from Keychain. Never logs the token.
+final class AuthRequestInterceptor: RequestInterceptor, @unchecked Sendable {
 
     private let keychain: KeychainServiceProtocol
 
@@ -36,7 +34,6 @@ final class AuthRequestInterceptor: RequestInterceptor {
             "Bearer \(token)",
             forHTTPHeaderField: "Authorization"
         )
-
         return request
     }
 }

@@ -2,72 +2,40 @@
 //  AuthRepository.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import Foundation
 
-final class AuthRepository: AuthRepositoryProtocol {
+final class AuthRepository: AuthRepositoryProtocol, Sendable {
 
-    private let apiClient: APIClientProtocol
+    private let apiClient: any APIClientProtocol
     private let keychain: KeychainServiceProtocol
 
-    init(apiClient: APIClientProtocol, keychain: KeychainServiceProtocol) {
+    init(apiClient: any APIClientProtocol, keychain: KeychainServiceProtocol) {
         self.apiClient = apiClient
         self.keychain = keychain
     }
 
-    func login(username: String, password: String) async throws -> LoginResponse {
-
-        let url = URL(
-            string:
-                "https://dummyjson.com/auth/login"
-        )!
-
-        var request =
-            URLRequest(url: url)
-
+    func login(username: String, password: String) async throws {
+        var request = URLRequest(url: APIEndpoint.login)
         request.httpMethod = "POST"
-
-        request.setValue(
-            "application/json",
-            forHTTPHeaderField:
-                "Content-Type"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            LoginRequest(username: username, password: password)
         )
 
-        let body = LoginRequest(
-            username: username,
-            password: password
+        let response: LoginResponse = try await apiClient.request(
+            request,
+            authenticated: false
         )
 
-        request.httpBody =
-            try JSONEncoder().encode(body)
-
-        let response: LoginResponse =
-            try await apiClient.request(
-                request,
-                authenticated: false
-            )
-
-        try keychain.save(
-            response.accessToken,
-            forKey: AuthStorageKey.accessToken
-        )
-
-        return response
+        try keychain.save(response.accessToken, forKey: AuthStorageKey.accessToken)
     }
 
     func getAccessToken() throws -> String? {
-
-        try keychain.get(
-            forKey: AuthStorageKey.accessToken
-        )
+        try keychain.get(forKey: AuthStorageKey.accessToken)
     }
 
     func logout() throws {
-
-        try keychain.delete(
-            forKey: AuthStorageKey.accessToken
-        )
+        try keychain.delete(forKey: AuthStorageKey.accessToken)
     }
 }

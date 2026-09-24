@@ -14,7 +14,7 @@ struct ToastData: Identifiable, Equatable {
     let type: ToastType
 }
 
-enum ToastType {
+enum ToastType: Equatable {
     case success
     case error
     case warning

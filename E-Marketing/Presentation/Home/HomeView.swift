@@ -2,8 +2,6 @@
 //  HomeView.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import SwiftUI
 
@@ -15,11 +13,13 @@ struct HomeView: View {
         NavigationStack {
             Text("Home")
                 .navigationTitle("Home")
+                .accessibilityIdentifier("home.root")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Çıkış Yap") {
                             onLogout()
                         }
+                        .accessibilityIdentifier("home.logout")
                     }
                 }
         }

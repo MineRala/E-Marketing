@@ -2,8 +2,6 @@
 //  AuthenticationViewModel.swift
 //  E-Marketing
 //
-//  Created by Mine Rala on 22.09.2026.
-//
 
 import Foundation
 
@@ -12,33 +10,32 @@ final class AuthenticationViewModel: ObservableObject {
 
     @Published var username = ""
     @Published var password = ""
-
     @Published private(set) var isLoading = false
-    @Published private(set) var isAuthenticated = false
+    @Published private(set) var loginRequestID = 0
 
     private let repository: AuthRepositoryProtocol
+    private let session: SessionStore
     private let toastManager: ToastManager
 
     init(
         repository: AuthRepositoryProtocol,
+        session: SessionStore,
         toastManager: ToastManager
     ) {
         self.repository = repository
+        self.session = session
         self.toastManager = toastManager
-
-        checkAuthentication()
     }
 
-    // MARK: - Login
+    func submitLogin() {
+        guard !isLoading else { return }
+        loginRequestID += 1
+    }
 
     func login() async {
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !username
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            .isEmpty
-        else {
+        guard !trimmedUsername.isEmpty else {
             showError(.emptyUsername)
             return
         }
@@ -49,55 +46,25 @@ final class AuthenticationViewModel: ObservableObject {
         }
 
         isLoading = true
-
-        defer {
-            isLoading = false
-        }
+        defer { isLoading = false }
 
         do {
-            _ = try await repository.login(
-                username: username,
+            try Task.checkCancellation()
+            try await repository.login(
+                username: trimmedUsername,
                 password: password
             )
-
-            isAuthenticated = true
-
+            try Task.checkCancellation()
+            password = ""
+            session.completeLogin()
+        } catch is CancellationError {
+            return
         } catch let error as AppError {
             showError(error)
-
         } catch {
             showError(.unknown)
         }
     }
-
-    // MARK: - Check Authentication
-
-    func checkAuthentication() {
-        do {
-            let token = try repository.getAccessToken()
-
-            isAuthenticated = !(token?.isEmpty ?? true)
-
-        } catch {
-            isAuthenticated = false
-        }
-    }
-
-    // MARK: - Logout
-
-    func logout() {
-        do {
-            try repository.logout()
-            username = ""
-            password = ""
-            isAuthenticated = false
-
-        } catch {
-            showError(.keychain)
-        }
-    }
-
-    // MARK: - Error
 
     private func showError(_ error: AppError) {
         toastManager.show(

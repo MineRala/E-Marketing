@@ -8,38 +8,26 @@
 import SwiftUI
 
 struct ToastView: View {
-
     let toast: ToastData
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: AppStyle.Space.s) {
 
             Image(systemName: iconName)
-                .font(
-                    .system(
-                        size: 18,
-                        weight: .semibold
-                    )
-                )
+                .font(AppStyle.Typography.icon)
+                .foregroundStyle(accent)
 
             Text(toast.message)
-                .font(
-                    .system(
-                        size: 14,
-                        weight: .medium
-                    )
-                )
+                .font(AppStyle.Typography.caption)
                 .multilineTextAlignment(.leading)
 
             Spacer()
         }
-        .foregroundColor(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(backgroundColor)
-        .clipShape(
-            RoundedRectangle(cornerRadius: 14)
-        )
+        .foregroundStyle(.white)
+        .padding(.horizontal, AppStyle.Space.inset)
+        .padding(.vertical, AppStyle.Space.m)
+        .background(AppColor.ink)
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.toast, style: .continuous))
         .shadow(
             color: .black.opacity(0.15),
             radius: 10,
@@ -61,16 +49,14 @@ struct ToastView: View {
         }
     }
 
-    private var backgroundColor: Color {
+    private var accent: Color {
         switch toast.type {
         case .success:
-            return .green
-        case .error:
-            return .red
-        case .warning:
-            return .orange
+            return Color(red: 0.35, green: 0.72, blue: 0.48)
+        case .error, .warning:
+            return AppColor.accent
         case .info:
-            return .blue
+            return Color(red: 0.45, green: 0.62, blue: 0.86)
         }
     }
 }

@@ -24,33 +24,33 @@ enum AppError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyUsername:
-            return "Kullanıcı adı boş bırakılamaz."
+            return "error.empty_username".localized
         case .emptyPassword:
-            return "Şifre boş bırakılamaz."
+            return "error.empty_password".localized
         case .invalidCredentials:
-            return "Kullanıcı adı veya şifre hatalı."
+            return "error.invalid_credentials".localized
         case .unauthorized:
-            return "Oturumunuz sona erdi. Lütfen tekrar giriş yapın."
+            return "error.unauthorized".localized
         case .forbidden:
-            return "Bu işlem için yetkiniz yok."
+            return "error.forbidden".localized
         case .notFound:
-            return "İstenen kaynak bulunamadı."
+            return "error.not_found".localized
         case .rateLimited:
-            return "Çok fazla istek gönderildi. Lütfen sonra tekrar deneyin."
+            return "error.rate_limited".localized
         case .server:
-            return "Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin."
+            return "error.server".localized
         case .timeout:
-            return "İstek zaman aşımına uğradı."
+            return "error.timeout".localized
         case .network:
-            return "İnternet bağlantınızı kontrol edin."
+            return "error.network".localized
         case .invalidResponse:
-            return "Sunucudan geçersiz yanıt alındı."
+            return "error.invalid_response".localized
         case .decoding:
-            return "Sunucu verileri işlenemedi."
+            return "error.decoding".localized
         case .keychain:
-            return "Güvenli veri kaydedilemedi."
+            return "error.keychain".localized
         case .unknown:
-            return "Beklenmeyen bir hata oluştu."
+            return "error.unknown".localized
         }
     }
 }

@@ -9,10 +9,12 @@ final class MockURLProtocol: URLProtocol {
 
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
     static var error: Error?
+    static var cacheStoragePolicy: URLCache.StoragePolicy = .notAllowed
 
     static func reset() {
         handler = nil
         error = nil
+        cacheStoragePolicy = .notAllowed
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -39,7 +41,7 @@ final class MockURLProtocol: URLProtocol {
 
         do {
             let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: MockURLProtocol.cacheStoragePolicy)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
         } catch {

@@ -21,15 +21,11 @@ final class KeychainService: KeychainServiceProtocol, @unchecked Sendable {
             throw AppError.keychain
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: data
-        ]
+        try delete(forKey: key)
 
-        SecItemDelete(query as CFDictionary)
+        var query = baseQuery(forKey: key)
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecValueData as String] = data
 
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -38,13 +34,9 @@ final class KeychainService: KeychainServiceProtocol, @unchecked Sendable {
     }
 
     func get(forKey key: String) throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+        var query = baseQuery(forKey: key)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -63,15 +55,17 @@ final class KeychainService: KeychainServiceProtocol, @unchecked Sendable {
     }
 
     func delete(forKey key: String) throws {
-        let query: [String: Any] = [
+        let status = SecItemDelete(baseQuery(forKey: key) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw AppError.keychain
+        }
+    }
+
+    private func baseQuery(forKey key: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key
         ]
-
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw AppError.keychain
-        }
     }
 }

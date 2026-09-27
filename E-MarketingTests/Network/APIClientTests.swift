@@ -124,6 +124,52 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testForbiddenNotFoundAndServerDoNotEndSession() async {
+        let cases: [(Int, AppError)] = [
+            (403, .forbidden),
+            (404, .notFound),
+            (500, .server)
+        ]
+
+        for (status, expected) in cases {
+            MockURLProtocol.handler = { request in
+                MockHTTP.response(url: request.url!, status: status, json: "{}")
+            }
+
+            let client = makeClient()
+
+            do {
+                let _: LoginResponse = try await client.request(
+                    URLRequest(url: APIEndpoint.products)
+                )
+                XCTFail("Expected \(expected)")
+            } catch let error as AppError {
+                XCTAssertEqual(error, expected)
+            } catch {
+                XCTFail("Unexpected error \(error)")
+            }
+        }
+
+        XCTAssertEqual(unauthorizedCounter.value, 0)
+    }
+
+    func testConnectionLostMapsToNetwork() async {
+        MockURLProtocol.error = URLError(.networkConnectionLost)
+        let client = makeClient()
+
+        do {
+            let _: LoginResponse = try await client.request(
+                URLRequest(url: APIEndpoint.login),
+                authenticated: false
+            )
+            XCTFail("Expected network")
+        } catch let error as AppError {
+            XCTAssertEqual(error, .network)
+        } catch {
+            XCTFail("Unexpected error \(error)")
+        }
+    }
+
     func testRateLimitedStatus() async {
         MockURLProtocol.handler = { request in
             MockHTTP.response(url: request.url!, status: 429, json: "{}")

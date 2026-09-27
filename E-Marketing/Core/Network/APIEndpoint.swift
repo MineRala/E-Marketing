@@ -10,4 +10,5 @@ enum APIEndpoint {
 
     static let login = base.appending(path: "auth/login")
     static let products = base.appending(path: "auth/products")
+    static let categories = base.appending(path: "products/categories")
 }

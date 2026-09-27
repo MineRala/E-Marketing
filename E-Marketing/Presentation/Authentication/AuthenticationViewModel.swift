@@ -13,50 +13,37 @@ final class AuthenticationViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var loginRequestID = 0
 
-    private let repository: AuthRepositoryProtocol
-    private let session: SessionStore
+    private let loginUseCase: LoginUseCaseProtocol
     private let toastManager: ToastManager
 
     init(
-        repository: AuthRepositoryProtocol,
-        session: SessionStore,
+        loginUseCase: LoginUseCaseProtocol,
         toastManager: ToastManager
     ) {
-        self.repository = repository
-        self.session = session
+        self.loginUseCase = loginUseCase
         self.toastManager = toastManager
     }
 
+    var canSubmit: Bool {
+        (try? LoginCredentials(username: username, password: password)) != nil
+    }
+
     func submitLogin() {
-        guard !isLoading else { return }
+        guard canSubmit, !isLoading else { return }
         loginRequestID += 1
     }
 
     func login() async {
-        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedUsername.isEmpty else {
-            showError(.emptyUsername)
-            return
-        }
-
-        guard !password.isEmpty else {
-            showError(.emptyPassword)
-            return
-        }
+        guard canSubmit else { return }
 
         isLoading = true
         defer { isLoading = false }
 
         do {
             try Task.checkCancellation()
-            try await repository.login(
-                username: trimmedUsername,
-                password: password
-            )
-            try Task.checkCancellation()
+            try await loginUseCase.execute(username: username, password: password)
             password = ""
-            session.completeLogin()
+            try Task.checkCancellation()
         } catch is CancellationError {
             return
         } catch let error as AppError {

@@ -36,6 +36,7 @@ final class AuthRepositoryTests: XCTestCase {
         try await sut.login(username: "emilys", password: "emilyspass")
 
         XCTAssertEqual(try sut.getAccessToken(), "access-token")
+        XCTAssertNil(try keychain.get(forKey: "refreshToken"))
     }
 
     func testLogoutDeletesToken() throws {

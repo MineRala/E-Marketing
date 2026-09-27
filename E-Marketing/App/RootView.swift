@@ -10,18 +10,33 @@ struct RootView: View {
     @ObservedObject var session: SessionStore
     @ObservedObject var toastManager: ToastManager
     @StateObject private var authenticationViewModel: AuthenticationViewModel
+    @StateObject private var homeViewModel: HomeViewModel
+    @StateObject private var productListViewModel: ProductListViewModel
 
     init(
         session: SessionStore,
         toastManager: ToastManager,
-        authRepository: AuthRepositoryProtocol
+        loginUseCase: LoginUseCaseProtocol,
+        fetchCategories: FetchCategoriesUseCaseProtocol,
+        fetchProductPage: FetchProductPageUseCaseProtocol
     ) {
         _session = ObservedObject(wrappedValue: session)
         _toastManager = ObservedObject(wrappedValue: toastManager)
         _authenticationViewModel = StateObject(
-            wrappedValue: AuthenticationViewModel(
-                repository: authRepository,
-                session: session,
+            wrappedValue: .init(
+                loginUseCase: loginUseCase,
+                toastManager: toastManager
+            )
+        )
+        _homeViewModel = StateObject(
+            wrappedValue: HomeViewModel(
+                fetchCategories: fetchCategories,
+                toastManager: toastManager
+            )
+        )
+        _productListViewModel = StateObject(
+            wrappedValue: ProductListViewModel(
+                fetchProductPage: fetchProductPage,
                 toastManager: toastManager
             )
         )
@@ -30,7 +45,10 @@ struct RootView: View {
     var body: some View {
         ZStack {
             if session.isAuthenticated {
-                HomeView {
+                MainTabView(
+                    homeViewModel: homeViewModel,
+                    productListViewModel: productListViewModel
+                ) {
                     session.logout()
                 }
             } else {
@@ -39,14 +57,28 @@ struct RootView: View {
 
             if let toast = toastManager.toast {
                 VStack {
-                    Spacer()
                     ToastView(toast: toast)
-                        .padding(.bottom, 30)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    Spacer()
                 }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: session.isAuthenticated)
         .animation(.easeInOut(duration: 0.25), value: toastManager.toast)
+        .task(id: toastManager.toast?.id) {
+            await dismissToastIfNeeded()
+        }
+    }
+
+    private func dismissToastIfNeeded() async {
+        guard let toast = toastManager.toast else { return }
+        do {
+            try await Task.sleep(for: .seconds(toast.duration))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, toastManager.toast?.id == toast.id else { return }
+        toastManager.dismiss()
     }
 }

@@ -20,33 +20,43 @@ final class AuthenticationViewModelTests: XCTestCase {
         toastManager = ToastManager()
         session = SessionStore(authRepository: repository, toastManager: toastManager)
         sut = AuthenticationViewModel(
-            repository: repository,
-            session: session,
+            loginUseCase: LoginUseCase(repository: repository, session: session),
             toastManager: toastManager
         )
     }
 
-    func testEmptyUsernameShowsValidationErrorAndDoesNotLogin() async {
+    func testEmptyUsernameDoesNotLoginOrShowToast() async {
         sut.username = "   "
         sut.password = "emilyspass"
 
+        XCTAssertFalse(sut.canSubmit)
+        sut.submitLogin()
         await sut.login()
 
+        XCTAssertEqual(sut.loginRequestID, 0)
         XCTAssertEqual(repository.loginCallCount, 0)
         XCTAssertFalse(session.isAuthenticated)
-        XCTAssertEqual(toastManager.toast?.message, AppError.emptyUsername.localizedDescription)
+        XCTAssertNil(toastManager.toast)
         XCTAssertFalse(sut.isLoading)
     }
 
-    func testEmptyPasswordShowsValidationErrorAndDoesNotLogin() async {
+    func testEmptyPasswordDoesNotLoginOrShowToast() async {
         sut.username = "emilys"
         sut.password = ""
 
+        XCTAssertFalse(sut.canSubmit)
         await sut.login()
 
         XCTAssertEqual(repository.loginCallCount, 0)
         XCTAssertFalse(session.isAuthenticated)
-        XCTAssertEqual(toastManager.toast?.message, AppError.emptyPassword.localizedDescription)
+        XCTAssertNil(toastManager.toast)
+    }
+
+    func testCanSubmitWhenBothFieldsAreFilled() {
+        sut.username = "emilys"
+        sut.password = "emilyspass"
+
+        XCTAssertTrue(sut.canSubmit)
     }
 
     func testSuccessfulLoginPersistsTokenAndAuthenticatesSession() async {
@@ -108,6 +118,8 @@ final class AuthenticationViewModelTests: XCTestCase {
     }
 
     func testSubmitLoginIncrementsRequestIDForStructuredTask() {
+        sut.username = "emilys"
+        sut.password = "emilyspass"
         XCTAssertEqual(sut.loginRequestID, 0)
         sut.submitLogin()
         XCTAssertEqual(sut.loginRequestID, 1)

@@ -5,13 +5,13 @@
 
 import Foundation
 
-/// Bridges URLSession callbacks to the main-actor session without retaining a cycle.
+/// Hops a 401 onto the main actor inside the in-flight request task.
 final class UnauthorizedDispatcher: @unchecked Sendable {
     @MainActor
     weak var session: SessionStore?
 
-    func notify() {
-        Task { @MainActor in
+    func notify() async {
+        await MainActor.run {
             session?.handleUnauthorized()
         }
     }

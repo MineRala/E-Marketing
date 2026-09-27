@@ -10,7 +10,9 @@ final class AppContainer {
 
     let session: SessionStore
     let toastManager: ToastManager
-    let authRepository: AuthRepositoryProtocol
+    let loginUseCase: LoginUseCaseProtocol
+    let fetchCategories: FetchCategoriesUseCaseProtocol
+    let fetchProductPage: FetchProductPageUseCaseProtocol
 
     init(
         isUITesting: Bool = ProcessInfo.processInfo.arguments.contains("--ui-testing")
@@ -21,12 +23,14 @@ final class AppContainer {
         if isUITesting {
             let keychain = InMemoryKeychainStore()
             let repository = UITestingAuthRepository(keychain: keychain)
-            self.authRepository = repository
             let session = SessionStore(
                 authRepository: repository,
                 toastManager: toastManager
             )
             self.session = session
+            self.loginUseCase = LoginUseCase(repository: repository, session: session)
+            self.fetchCategories = FetchCategoriesUseCase(repository: UITestingCatalogRepository())
+            self.fetchProductPage = FetchProductPageUseCase(repository: UITestingProductRepository())
             session.restore()
             return
         }
@@ -44,21 +48,26 @@ final class AppContainer {
         let apiClient = APIClient(
             interceptor: interceptor,
             session: URLSession(configuration: configuration),
-            onUnauthorized: { dispatcher.notify() }
+            onUnauthorized: { await dispatcher.notify() }
         )
 
         let repository = AuthRepository(
             apiClient: apiClient,
             keychain: keychain
         )
-        self.authRepository = repository
-
         let session = SessionStore(
             authRepository: repository,
             toastManager: toastManager
         )
         dispatcher.session = session
         self.session = session
+        self.loginUseCase = LoginUseCase(repository: repository, session: session)
+        self.fetchCategories = FetchCategoriesUseCase(
+            repository: CatalogRepository(apiClient: apiClient)
+        )
+        self.fetchProductPage = FetchProductPageUseCase(
+            repository: ProductRepository(apiClient: apiClient)
+        )
         session.restore()
     }
 }

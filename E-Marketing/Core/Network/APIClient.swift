@@ -6,10 +6,7 @@
 import Foundation
 
 protocol APIClientProtocol: Sendable {
-    func request<T: Decodable>(
-        _ urlRequest: URLRequest,
-        authenticated: Bool
-    ) async throws -> T
+    func request<T: Decodable>(_ urlRequest: URLRequest, authenticated: Bool) async throws -> T
 }
 
 extension APIClientProtocol {
@@ -22,22 +19,15 @@ final class APIClient: APIClientProtocol, @unchecked Sendable {
 
     private let interceptor: any RequestInterceptor
     private let session: any HTTPDataLoading
-    private let onUnauthorized: @Sendable () -> Void
+    private let onUnauthorized: @Sendable () async -> Void
 
-    init(
-        interceptor: any RequestInterceptor,
-        session: any HTTPDataLoading,
-        onUnauthorized: @escaping @Sendable () -> Void
-    ) {
+    init(interceptor: any RequestInterceptor, session: any HTTPDataLoading, onUnauthorized: @escaping @Sendable () async -> Void) {
         self.interceptor = interceptor
         self.session = session
         self.onUnauthorized = onUnauthorized
     }
 
-    func request<T: Decodable>(
-        _ urlRequest: URLRequest,
-        authenticated: Bool
-    ) async throws -> T {
+    func request<T: Decodable>(_ urlRequest: URLRequest, authenticated: Bool) async throws -> T {
         try Task.checkCancellation()
 
         let outgoingRequest: URLRequest
@@ -71,7 +61,7 @@ final class APIClient: APIClientProtocol, @unchecked Sendable {
             )
 
             if mapped == .unauthorized {
-                onUnauthorized()
+                await onUnauthorized()
             }
 
             throw mapped

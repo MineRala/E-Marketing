@@ -1,33 +1,37 @@
 # E-Marketing
 
-DummyJSON tabanlı E-Ticaret iOS uygulaması. Şu an kimlik doğrulama (login / session / Keychain / interceptor) senior değerlendirme kriterlerine göre tamamlanmıştır. Home bir oturum kabuğudur; ürün listeleme ve sayfalama bir sonraki teslimatta eklenecektir.
+DummyJSON tabanlı E-Ticaret iOS uygulaması. Girişten sonra alt sekmede Ana Sayfa ve Ürünler vardır. Ana sayfada temsili kampanya banner’ları ve `GET /products/categories` kategorileri görünür; kategoriye dokunmak sayfa açmaz. Ürünler `GET /auth/products` ile `limit` ve `skip` kullanılarak sayfalanır.
 
 Test kullanıcısı (DummyJSON): `emilys` / `emilyspass`
 
 ## Mimari
 
-**MVVM + ince Domain.** TCA bu görevde login, session ve tek bir korumalı API için gereksiz indirection üretir. MVVM ViewModel’i XCTest ile doğrudan beslemeyi kolaylaştırır.
+**MVVM.** TCA bu görevde login, session ve tek bir korumalı API için gereksiz indirection üretir. MVVM ViewModel’i XCTest ile doğrudan beslemeyi kolaylaştırır.
 
 Katmanlar:
 
-- **Presentation:** `AuthenticationView` / `AuthenticationViewModel`, `HomeView`
-- **Domain:** `AuthRepositoryProtocol`, `SessionStore` (oturum tek kaynağı)
-- **Data:** `AuthRepository`, DummyJSON DTO’ları
+- **Presentation:** `AuthenticationView` / `AuthenticationViewModel`, `HomeView` / `HomeViewModel`, `ProductListView` / `ProductListViewModel`, `MainTabView`. ViewModel ekran durumunu tutar: form, yükleniyor, toast, sekme dönüşünde listeyi koruma.
+- **Domain:** `Product`, `ProductPage` ve `ProductCategory` API’den bağımsız varlıklardır; `Decodable` değildir. `LoginUseCase` boş alanı keser, kullanıcı adını kırpar, repository’ye yazar ve `SessionStore.completeLogin()` çağırır. `ProductPagination` sayfa boyu, `skip`, tekrarlayan id ve `hasMore` kararını verir; `FetchProductPageUseCase` bunu repository’ye uygular. `FetchCategoriesUseCase` listeyi `Catalog.prepare` ile kurar: boş slug veya ad düşer, http(s) olmayan adres düşer, aynı slug tekrar etmez, ad sırasına dizilir. `SessionStore` oturumun tek kaynağıdır.
+- **Data:** `AuthRepository`, `CatalogRepository`, `ProductRepository`. `ProductDTO`, `ProductPageDTO` ve `ProductCategoryDTO` DummyJSON cevabını çözer ve alan alan domain varlığına çevirir. Repository HTTP ve Keychain bilir; sayfa birleştirmez, kategori elemez.
 - **Core:** `APIClient`, `AuthRequestInterceptor`, `KeychainService`, `AppError`
 
-Bağımlılıklar protokol üzerinden `AppContainer` içinde enjekte edilir. ViewModel somut `URLSession` veya Keychain görmez.
+Bağımlılıklar protokol üzerinden `AppContainer` içinde enjekte edilir. ViewModel somut `URLSession`, Keychain veya repository görmez.
 
-Oturum durumu `AuthenticationViewModel` içinde tutulmaz. ViewModel yalnızca form + login use-case’idir; `isAuthenticated` `SessionStore`’dadır. Kök `RootView` buna göre Auth veya Home basar.
+`isAuthenticated` `SessionStore`’dadır. Kök `RootView` buna göre Auth veya sekmeleri basar.
 
 ## Durum Yönetimi
 
-- `SessionStore` ve `AuthenticationViewModel`: `@StateObject` / `@ObservedObject`. Session uygulama ömrü boyunca `AppContainer`’dadır; Auth VM `RootView`’de `@StateObject` ile yaratılır ki login formu klavye turlarında yeniden init olmasın.
+- `SessionStore`, `AuthenticationViewModel`, `HomeViewModel` ve `ProductListViewModel`: `@StateObject` / `@ObservedObject`. Session uygulama ömrü boyunca `AppContainer`’dadır. View model’ler `RootView`’de `@StateObject` ile yaratılır. Sekme değişince ürün sayfası ve yüklenmiş liste korunur; `loadInitial` liste doluysa yeniden istek atmaz.
 - `ToastManager`: `@ObservedObject`. Önceki sürümde toast `AppContainer` üzerinden okunuyordu ve SwiftUI invalidation kaçırıyordu.
 - Form alanları `@Published`; token asla `@Published` / `AppStorage` / `UserDefaults` değil.
 
+## Arayüz
+
+Renkler `AppColor`, yazı, boşluk, köşe ve ortak yüzeyler `AppStyle` içindedir. Metinler `AppFont` üzerinden Montserrat kullanır (Regular, Medium, SemiBold, Bold). Simgeler sistem fontunda kalır. Ekran zemini `appScreen()`, liste kartı `appCard()`, giriş formu `appPanel()`, alan `appField()` kullanır. Böylece punto ve yarıçap view içinde tekrarlanmaz. Üçüncü parti bir tasarım kiti yok; bu üç ekranın ortak dili buradan gelir.
+
 ## Ağ Katmanı
 
-Üçüncü parti (Alamofire) yok. `URLSession` yeterli, testte `URLProtocol` ile değiştirilebilir, token header’ı bizim interceptor’da kalır.
+Üçüncü parti yok. API için Alamofire, görsel için Kingfisher (veya SDWebImage / Nuke) eklenmedi. İkisi de `URLSession` ile çözülüyor. API isteği testte `URLProtocol` ile değiştirilebiliyor, token header’ı bizim interceptor’da kalıyor. Görsel indirme `NSCache` ve uygulamanın kendi disk klasörünü kullanır. `URLCache` DummyJSON `Cache-Control: no-store` başlığında diske yazmadığı için görsel oturumunda kapalıdır. Hücre boyutu ImageIO ile küçültülür. Progressive JPEG ve öncelik kuyruğu yok; o ihtiyaç çıkınca kütüphane eklemek daha doğru olur.
 
 - Dedicated `URLSessionConfiguration`: 30s request / 60s resource timeout, `waitsForConnectivity = false`
 - `HTTPDataLoading` protokolü session’ı soyutlar
@@ -37,24 +41,37 @@ Oturum durumu `AuthenticationViewModel` içinde tutulmaz. ViewModel yalnızca fo
 
 ## Kimlik Doğrulama
 
-1. `POST https://dummyjson.com/auth/login` (`expiresInMins: 30`)
-2. `accessToken` Keychain’e yazılır (`kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, service `com.MineRala.E-Marketing`)
+1. `POST https://dummyjson.com/auth/login` (`username`, `password`). `expiresInMins` gönderilmez; DummyJSON access token süresini 60 dakika tutar.
+2. `accessToken` Keychain’e yazılır (`kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, service `com.MineRala.E-Marketing`). Güncellemede silme sorgusu yalnız servis ve hesap kullanır; eski token farklı olsa da kayıt değişir. `refreshToken` giriş gövdesinde çözülür, loga yazılmaz ve Keychain’e konmaz. Dokümanda yenileme ucu yoktur; kullanılmayan bir sır saklanmaz.
 3. `LoginResponse` Presentation’a dönmez; repository token’ı kaydeder ve biter
 4. `SessionStore.completeLogin()` → Home
 5. Cold start: Keychain’de token varsa Home
 6. Çıkış Yap / 401: Keychain silinir, Auth’a dönüş
 
-Korumalı uçta 401: interceptor’sız status map → `AppError.unauthorized` → `UnauthorizedDispatcher` (MainActor) → `SessionStore.handleUnauthorized()`. Login 401’i `invalidCredentials`’tır, oturumu kapatmaz.
+Korumalı uçta 401: interceptor’sız status map → `AppError.unauthorized` → `UnauthorizedDispatcher.notify()` isteğin kendi task’ı içinde `MainActor`’a geçer → `SessionStore.handleUnauthorized()`. Ayrı bir `Task` açılmaz. Login 401’i `invalidCredentials`’tır, oturumu kapatmaz. Korumalı 401 oturumu kapatır.
 
 `LoginResponse.description` / `debugDescription` token içermez. Konsola request dump yok.
 
 ## Sayfalama
 
-Ürün listesi henüz yok. Plan: `limit`/`skip`, inflight + end-of-list guard, ViewModel’de sayfa durumu (sekme değişiminde korunur). `GET /auth/products` endpoint’i `APIEndpoint.products` olarak hazırdır.
+Ürünler sekmesi `GET /auth/products?limit=&skip=` kullanır. Sayfa boyu, `skip` ve listenin bitip bitmediği `ProductPagination` içindedir. `skip`, eldeki ürün sayısıdır. Gelen sayfadaki tekrarlayan id’ler eklenmez. İlk sayfada `hasMore`, `count < total` iken açıktır. Sonraki sayfada yeni ürün yoksa veya toplam dolmuşsa kapanır.
+
+ViewModel bu kararı vermez. Yalnızca aynı anda tek isteği (`isLoading` / `isLoadingNextPage`) ve sekme dönüşünde dolu listenin yeniden çekilmemesini tutar. Listenin sonundaki sentinel `List` içinde lazy durur; görünmeden istek atılmaz.
 
 ## Hata Yönetimi
 
-`NetworkErrorMapper` status ve `URLError` kodlarını `AppError`’a çevirir:
+Hata katmanlar arasında `AppError` olarak yürür. View ham `URLError` veya HTTP kodu görmez.
+
+1. `APIClient` ağ hatasını ve HTTP status’unu `NetworkErrorMapper` ile `AppError`’a çevirir. Bozuk JSON `decoding`, HTTP olmayan yanıt `invalidResponse` olur. `CancellationError` olduğu gibi yukarı çıkar.
+2. Repository bu hatayı yeniden fırlatır. Ürün URL’i kurulamazsa `invalidResponse` burada üretilir. Keychain yazma ve silme hatası `keychain` olarak yukarı çıkar.
+3. ViewModel (`AuthenticationViewModel`, `HomeViewModel`, `ProductListViewModel`) `AppError`’ı yakalar ve `localizedDescription` ile toast gösterir. Tanınmayan hata `unknown` olur.
+4. `CancellationError` toast üretmez. Boş kullanıcı adı veya şifre `LoginCredentials` içinde kesilir; buton `canSubmit` ile kapalıdır, istek ve toast yoktur.
+
+Korumalı istekte 401 ayrıdır: `APIClient` status’u `unauthorized` yapar ve fırlatmadan önce, isteğin kendi task’ı içinde `SessionStore.handleUnauthorized()` çağırır. Oturum kapanır ve toast’ı `SessionStore` basar. Login 401’i `invalidCredentials`’tır; ViewModel toast basar, oturum açılmaz. Çıkışta Keychain silinemezse toast’ı yine `SessionStore` basar.
+
+`NetworkErrorMapper` eşlemesi:
+
+
 
 | Durum | AppError |
 |---|---|
@@ -68,39 +85,90 @@ Korumalı uçta 401: interceptor’sız status map → `AppError.unauthorized` �
 | bağlantı yok / kopma | `network` |
 | bozuk JSON | `decoding` |
 
-Kullanıcıya toast ile Türkçe mesaj. `CancellationError` toast üretmez.
+Toast metni `AppError.errorDescription` üzerinden lokalize edilir.
 
 ## Performans
 
-Auth kapsamında: token bellek cache’lenmez, her korumalı istekte Keychain okunur (sızıntı yüzeyi küçük). Liste/görsel cache ürün ekranında eklenecek (`List` / `LazyVStack`, image pipeline).
+Auth kapsamında: token bellek cache’lenmez, her korumalı istekte Keychain okunur (sızıntı yüzeyi küçük). Ana sayfada kampanyalar yereldir; kategoriler `LazyVGrid` içindedir. Ürün listesi `List` kullanır ve satır `Equatable` olduğu için aynı ürün yeniden çizilmez.
 
-Login, SwiftUI `.task(id:)` ile çalışır. View kaybolunca (Home’a geçiş) task iptal edilir; `Button { Task { } }` kullanılmaz.
+Küçük resim `CachedAsyncImage` + `ImageCache` ile yüklenir. Akış: bellek (`NSCache`, en fazla 200 görsel) → Caches altındaki dosya klasörü (100 MB, en eski dosya silinir) → ağ. Dosya adı UUID’dir. Adres ile bu ad `index.json` içinde eşlenir; uygulama yeniden açılınca aynı dosya bulunur. Swift’in `hashValue` değeri her açılışta değiştiği için disk adı olamaz. Sunucu `no-store` gönderse de ikinci istek ağa gitmez. Ürün satırı görseli 76 puntodur. `ImageIO` tam kareyi belleğe almadan en uzun kenarı `76 × ekran ölçeği` piksel olan küçük resim üretir. Diskte orijinal bayt durur; belleğe giren görsel hücre boyutundadır. İstek `async`’tir. Hücre kaybolunca `.task` iptal olur, görünmeyen görsel indirilmeye devam etmez. Kingfisher’ın bu ekranda karşılayacağı ek davranış (placeholder pipeline, prefetch, processor) yok. Bu yüzden bağımlılık eklenmedi.
+
+Login ve toast kapanışı SwiftUI `.task(id:)` ile çalışır. Yeni toast veya ekranın kapanması önceki beklemeyi iptal eder. `Button { Task { } }` kullanılmaz.
 
 ## Test
 
-| Ne | Neden |
-|---|---|
-| `AuthenticationViewModelTests` | loading, başarı, boş alan, hatalı giriş, token’ın repository üzerinden yazılması |
-| `SessionStoreTests` | restore, logout, 401’de oturum kapatma |
-| `APIClientTests` | URLProtocol: 200, korumalı 401, login 401, timeout, malformed JSON, 429 |
-| `AuthRequestInterceptorTests` | Bearer ekleme / override etmeme |
-| `AuthRepositoryTests` | login token kaydı, login’de Authorization yok |
-| `LoginResponseRedactionTests` | description’da token yok |
-| XCUITest | `--ui-testing` ile network’süz login → Home → logout |
+Üç başlık dokümandaki test stratejisine göre. Hepsi XCTest. Network mock’u `URLProtocol` (`MockURLProtocol`).
 
-UI test gerçek DummyJSON’a gitmez (`UITestingAuthRepository` + `InMemoryKeychainStore`).
+`E-MarketingTests` katmana göre ayrılır: `Presentation`, `Domain`, `Data`, `Network`, `Storage`, `Support`.
+
+`LoginUseCaseTests` boş kullanıcı adı, boş şifre, kırpılmış kullanıcı adı ve hatalı girişte oturumun açılmamasını doğrular. `ProductPaginationTests` sayfa boyu, `skip`, tekrarlayan id ve `hasMore` kararını ViewModel olmadan doğrular. `FetchCategoriesUseCaseTests` boş, tekrarlayan ve http olmayan kategorilerin elenip ad sırasına dizildiğini doğrular.
+
+### Unit test — ViewModel
+
+Dosya: `E-MarketingTests/Presentation/AuthenticationViewModelTests.swift`. Repository mock’lanır; ağ yok.
+
+| Senaryo | Test |
+|---|---|
+| Yükleme | `testLoadingIsTrueWhileLoginRequestIsInFlight` |
+| Başarı | `testSuccessfulLoginPersistsTokenAndAuthenticatesSession` |
+| Hatalı giriş | `testFailedLoginShowsErrorAndDoesNotAuthenticate` |
+| Token saklama | Aynı başarı testi: `repository.token == "stored-token"`, oturum açılır, şifre temizlenir |
+
+`HomeViewModelTests`: kategori başarı ve hata. `ProductListViewModelTests`: ilk sayfa, sonraki sayfa, liste sonu, eşzamanlı ikinci isteğin yutulması, sekme dönüşünde yeniden çekmeme, hata toast’ı.
+
+Boş kullanıcı adı veya boş şifrede `canSubmit` false kalır; istek ve toast yok. Buton bu durumda kapalıdır.
+
+### Repository / Network
+
+`URLProtocol` ile mock. Gerçek DummyJSON çağrılmaz.
+
+| Senaryo | Test |
+|---|---|
+| Başarılı yanıt | `APIClientTests.testSuccessfulJSONResponse`, `AuthRepositoryTests.testLoginSavesAccessTokenAndDoesNotSendBearer` |
+| 401 | `APIClientTests.testUnauthorizedOnProtectedRequestNotifiesSession` (oturum kapanır), `testLogin401DoesNotNotifySession` (hatalı giriş, oturum açık kalmaz) |
+| Zaman aşımı | `APIClientTests.testTimeoutMapsToTimeoutError` |
+| Hatalı format | `APIClientTests.testMalformedJSONMapsToDecoding` |
+
+Aynı katmanda ayrıca: Bearer ekleme (`AuthRequestInterceptorTests`), access token’ın Keychain’e yazılıp çıkışta silinmesi ve refresh token’ın saklanmaması (`AuthRepositoryTests`, `KeychainServiceTests`), kategori listesi ve Bearer (`CatalogRepositoryTests`), ürün listesinde `limit`/`skip` ve Bearer (`ProductRepositoryTests`), 403 / 404 / 429 / 500 ve bağlantı kopması (`APIClientTests`). Görsel bellek, `no-store` altında disk ve hücre boyutuna küçültme `ImageCacheTests` içindedir.
+
+### UI test (XCUITest)
+
+Dosyalar: `AuthenticationUITests`, `HomeUITests`, `ProductListUITests`. Launch argument `--ui-testing`. Ağ yok; `UITestingAuthRepository`, `UITestingCatalogRepository`, `UITestingProductRepository` + `InMemoryKeychainStore`.
+
+| Akış | Test | Durum |
+|---|---|---|
+| Giriş → ana sayfa | `testSuccessfulLoginNavigatesToHome` | Var |
+| Hatalı girişte ekranda kalma | `testFailedLoginStaysOnAuthentication` | Var |
+| Ana sayfadan çıkış → giriş | `testLogoutReturnsToAuthentication` | Var |
+| Giriş → ana sayfa → ürün listesi | `testLoginHomeThenProductList` | Var |
+| Ana sayfa kampanya ve kategoriler | `HomeUITests.testHomeShowsCampaignAndCategories` | Var |
+| Kategori kartı sayfa açmaz | `HomeUITests.testCategoryCardDoesNotLeaveHome` | Var |
+| Çıkış iptali ana sayfada kalır | `HomeUITests.testLogoutCancelStaysOnHome` | Var |
+| Ürün satırı ve fiyat | `ProductListUITests.testProductListShowsFixtureProduct` | Var |
+| Sekme dönüşünde liste durur | `ProductListUITests.testSwitchingTabsKeepsTheLoadedProduct` | Var |
+| Hatalı girişte toast | `testFailedLoginShowsErrorToast` | Var |
+| Kaydırınca sonraki ürün sayfası | `ProductPaginationUITests.testScrollingLoadsTheNextPage` | Var |
+| 403 toast | `HTTPErrorUITests.testForbiddenResponseShowsToast` | Var |
+| 404 toast | `HTTPErrorUITests.testNotFoundResponseShowsToast` | Var |
+| 429 toast | `HTTPErrorUITests.testRateLimitedResponseShowsToast` | Var |
+| 500 toast | `HTTPErrorUITests.testServerErrorResponseShowsToast` | Var |
 
 Xcode’da `E-Marketing` scheme → Test.
 
 ## İyileştirme Alanları
 
-- Refresh token rotasyonu ve 401’de sessiz yenileme (DummyJSON refresh endpoint)
+- 401’de sessiz yenileme. O uç eklenirse refresh token Keychain’e yazılır. Doküman bu ucu istemez; şu an 401 oturumu kapatır.
 - Keychain access group / iCloud sync kapalı tutuldu; production’da biometric unlock ayrı karar
+- Satır yüksekliği değişirse küçük resim ölçüsü yeniden verilir; şu an 76 punto
 - Structured logging (os.Logger) PII redaction ile; crash reporter’a request header scrub
-- Ürün listesi, kategoriler, görsel cache, pagination
-- UI test planı ve ürün listesi geçişi
+- Ürün detay ekranı (doküman istemiyor)
 - Certificate pinning (DummyJSON için gerekmez; production API’de)
 
 ## Çalıştırma
 
-Xcode 16, iOS 18.4+. Scheme: **E-Marketing**.
+Bağımlılık yok. CocoaPods ve Swift Package Manager kullanılmıyor; `E-Marketing.xcodeproj` doğrudan açılır.
+
+1. Xcode 16. Scheme: **E-Marketing**. Hedef: iOS 16.0 veya üzeri simülatör.
+2. Run. Uygulama DummyJSON’a çıkar. Giriş: `emilys` / `emilyspass`.
+3. Oturum Keychain’de durur. Aynı simülatörde yeniden açılınca giriş atlanır. Çıkış, ana sayfadaki ikondan yapılır.
+4. Test aynı scheme üzerinden Product → Test ile koşar. Unit testler `URLProtocol` kullanır, ağa çıkmaz. UI testler `--ui-testing` ile sahte repository açar; DummyJSON çağrılmaz.

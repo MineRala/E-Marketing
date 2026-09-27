@@ -13,7 +13,7 @@ final class AuthenticationUITests: XCTestCase {
         super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["--ui-testing"]
+        app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
     }
 
@@ -30,7 +30,7 @@ final class AuthenticationUITests: XCTestCase {
         login.tap()
 
         XCTAssertTrue(app.buttons["home.logout"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Home"].exists)
+        XCTAssertTrue(app.staticTexts["home.root"].exists)
     }
 
     func testFailedLoginStaysOnAuthentication() {
@@ -48,6 +48,22 @@ final class AuthenticationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["home.logout"].exists)
     }
 
+    func testFailedLoginShowsErrorToast() {
+        let username = app.textFields["auth.username"]
+        let password = app.secureTextFields["auth.password"]
+
+        XCTAssertTrue(username.waitForExistence(timeout: 5))
+        username.tap()
+        username.typeText("emilys")
+        password.tap()
+        password.typeText("wrong")
+        app.buttons["auth.login"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Incorrect username or password."].waitForExistence(timeout: 5)
+        )
+    }
+
     func testLogoutReturnsToAuthentication() {
         let username = app.textFields["auth.username"]
         let password = app.secureTextFields["auth.password"]
@@ -63,6 +79,30 @@ final class AuthenticationUITests: XCTestCase {
         XCTAssertTrue(logout.waitForExistence(timeout: 5))
         logout.tap()
 
+        let confirm = app.buttons["home.logout.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
         XCTAssertTrue(app.buttons["auth.login"].waitForExistence(timeout: 5))
+    }
+
+    func testLoginHomeThenProductList() {
+        let username = app.textFields["auth.username"]
+        let password = app.secureTextFields["auth.password"]
+
+        XCTAssertTrue(username.waitForExistence(timeout: 5))
+        username.tap()
+        username.typeText("emilys")
+        password.tap()
+        password.typeText("emilyspass")
+        app.buttons["auth.login"].tap()
+
+        XCTAssertTrue(app.buttons["home.logout"].waitForExistence(timeout: 5))
+
+        let productsTab = app.tabBars.buttons["Products"]
+        XCTAssertTrue(productsTab.waitForExistence(timeout: 5))
+        productsTab.tap()
+
+        XCTAssertTrue(app.staticTexts["Essence Mascara"].waitForExistence(timeout: 5))
     }
 }

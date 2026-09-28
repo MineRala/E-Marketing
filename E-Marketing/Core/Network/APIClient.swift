@@ -15,7 +15,7 @@ extension APIClientProtocol {
     }
 }
 
-final class APIClient: APIClientProtocol, @unchecked Sendable {
+final class APIClient: APIClientProtocol, Sendable {
 
     private let interceptor: any RequestInterceptor
     private let session: any HTTPDataLoading
@@ -32,7 +32,12 @@ final class APIClient: APIClientProtocol, @unchecked Sendable {
 
         let outgoingRequest: URLRequest
         if authenticated {
-            outgoingRequest = try interceptor.adapt(urlRequest)
+            do {
+                outgoingRequest = try interceptor.adapt(urlRequest)
+            } catch let error as AppError where error == .unauthorized {
+                await onUnauthorized()
+                throw error
+            }
         } else {
             outgoingRequest = urlRequest
         }

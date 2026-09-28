@@ -49,14 +49,7 @@ struct ProductListView: View {
                         }
 
                         if viewModel.hasMore {
-                            ProgressView()
-                                .tint(AppColor.accent)
-                                .frame(maxWidth: .infinity)
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                                .task(id: viewModel.products.count) {
-                                    await viewModel.loadNextIfNeeded()
-                                }
+                            nextPageFooter
                         }
                     }
                     .listStyle(.plain)
@@ -74,4 +67,42 @@ struct ProductListView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var nextPageFooter: some View {
+        Group {
+            if viewModel.nextPageDidFail {
+                Button("home.retry".localized) {
+                    viewModel.retryNextPage()
+                }
+                .font(AppStyle.Typography.bodyStrong)
+                .buttonStyle(.bordered)
+                .tint(AppColor.accent)
+                .accessibilityIdentifier("products.loadMore.retry")
+            } else {
+                ProgressView()
+                    .tint(AppColor.accent)
+                    .task(id: NextPageRequest(
+                        count: viewModel.products.count,
+                        attempt: viewModel.nextPageAttempt
+                    )) {
+                        await viewModel.loadNextIfNeeded()
+                    }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(
+            top: AppStyle.Space.s,
+            leading: AppStyle.Space.screen,
+            bottom: AppStyle.Space.s,
+            trailing: AppStyle.Space.screen
+        ))
+        .listRowBackground(Color.clear)
+    }
+}
+
+private struct NextPageRequest: Equatable {
+    let count: Int
+    let attempt: Int
 }

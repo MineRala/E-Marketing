@@ -8,8 +8,6 @@ import UIKit
 
 actor ImageCache {
 
-    static let shared = ImageCache()
-
     private static let indexFileName = "index.json"
 
     private let memory = NSCache<NSURL, UIImage>()

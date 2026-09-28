@@ -7,7 +7,7 @@ import Foundation
 
 protocol FetchProductPageUseCaseProtocol: Sendable {
     func loadFirstPage() async throws -> ProductListPage
-    func loadNextPage(after loaded: [Product]) async throws -> ProductListPage
+    func loadNextPage(after loaded: [Product], skip: Int) async throws -> ProductListPage
 }
 
 struct FetchProductPageUseCase: FetchProductPageUseCaseProtocol {
@@ -22,14 +22,14 @@ struct FetchProductPageUseCase: FetchProductPageUseCaseProtocol {
     func loadFirstPage() async throws -> ProductListPage {
         let request = pagination.firstPageRequest()
         let page = try await repository.fetchProducts(limit: request.limit, skip: request.skip)
-        return pagination.applyingFirstPage(page)
+        return pagination.applyingFirstPage(page, requestedSkip: request.skip)
     }
 
-    func loadNextPage(after loaded: [Product]) async throws -> ProductListPage {
-        guard let request = pagination.nextPageRequest(loadedCount: loaded.count) else {
-            return ProductListPage(products: loaded, hasMore: false)
+    func loadNextPage(after loaded: [Product], skip: Int) async throws -> ProductListPage {
+        guard let request = pagination.nextPageRequest(skip: skip) else {
+            return ProductListPage(products: loaded, hasMore: false, nextSkip: skip)
         }
         let page = try await repository.fetchProducts(limit: request.limit, skip: request.skip)
-        return pagination.applyingNextPage(page, to: loaded)
+        return pagination.applyingNextPage(page, to: loaded, requestedSkip: request.skip)
     }
 }

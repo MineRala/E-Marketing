@@ -15,54 +15,90 @@ final class ProductPaginationTests: XCTestCase {
     }
 
     func testFirstPageHasMoreWhileCountIsBelowTotal() {
-        let page = pagination.applyingFirstPage(makePage(ids: [1, 2], total: 4))
+        let page = pagination.applyingFirstPage(makePage(ids: [1, 2], total: 4), requestedSkip: 0)
 
         XCTAssertEqual(page.products.map(\.id), [1, 2])
+        XCTAssertEqual(page.nextSkip, 2)
         XCTAssertTrue(page.hasMore)
     }
 
     func testFirstPageStopsWhenCountReachesTotal() {
-        let page = pagination.applyingFirstPage(makePage(ids: [1, 2], total: 2))
+        let page = pagination.applyingFirstPage(makePage(ids: [1, 2], total: 2), requestedSkip: 0)
 
+        XCTAssertEqual(page.nextSkip, 2)
         XCTAssertFalse(page.hasMore)
     }
 
-    func testNextPageSkipsLoadedCountAndDropsDuplicateIDs() {
+    func testNextPageSkipsServerOffsetAndDropsDuplicateIDs() {
         let existing = [product(1), product(2)]
 
         XCTAssertEqual(
-            pagination.nextPageRequest(loadedCount: existing.count),
+            pagination.nextPageRequest(skip: 2),
             ProductPagination.Request(limit: 2, skip: 2)
         )
 
         let page = pagination.applyingNextPage(
             makePage(ids: [2, 3], total: 4),
-            to: existing
+            to: existing,
+            requestedSkip: 2
         )
 
         XCTAssertEqual(page.products.map(\.id), [1, 2, 3])
+        XCTAssertEqual(page.nextSkip, 4)
+        XCTAssertFalse(page.hasMore)
+    }
+
+    func testDuplicateIDsDoNotPullTheNextSkipBackward() {
+        let existing = [product(1), product(2), product(3)]
+
+        let page = pagination.applyingNextPage(
+            makePage(ids: [3, 5], total: 8, skip: 4),
+            to: existing,
+            requestedSkip: 4
+        )
+
+        XCTAssertEqual(page.products.map(\.id), [1, 2, 3, 5])
+        XCTAssertEqual(page.nextSkip, 6)
+        XCTAssertTrue(page.hasMore)
+        XCTAssertEqual(
+            pagination.nextPageRequest(skip: page.nextSkip),
+            ProductPagination.Request(limit: 2, skip: 6)
+        )
+    }
+
+    func testAllDuplicatePageAdvancesSkipWhileTotalRemains() {
+        let page = pagination.applyingNextPage(
+            makePage(ids: [1, 2], total: 6),
+            to: [product(1), product(2)],
+            requestedSkip: 2
+        )
+
+        XCTAssertEqual(page.products.map(\.id), [1, 2])
+        XCTAssertEqual(page.nextSkip, 4)
         XCTAssertTrue(page.hasMore)
     }
 
-    func testNextPageStopsWhenIncomingProductsAreAlreadyLoaded() {
+    func testEmptyServerPageStops() {
         let page = pagination.applyingNextPage(
-            makePage(ids: [1], total: 4),
-            to: [product(1)]
+            makePage(ids: [], total: 6),
+            to: [product(1), product(2)],
+            requestedSkip: 2
         )
 
-        XCTAssertEqual(page.products.map(\.id), [1])
+        XCTAssertEqual(page.products.map(\.id), [1, 2])
+        XCTAssertEqual(page.nextSkip, 2)
         XCTAssertFalse(page.hasMore)
     }
 
     func testNextPageRequestIsNilBeforeTheFirstPage() {
-        XCTAssertNil(pagination.nextPageRequest(loadedCount: 0))
+        XCTAssertNil(pagination.nextPageRequest(skip: 0))
     }
 
-    private func makePage(ids: [Int], total: Int) -> ProductPage {
+    private func makePage(ids: [Int], total: Int, skip: Int = 0) -> ProductPage {
         ProductPage(
             products: ids.map(product),
             total: total,
-            skip: 0,
+            skip: skip,
             limit: ids.count
         )
     }

@@ -9,6 +9,7 @@ struct RootView: View {
 
     @ObservedObject var session: SessionStore
     @ObservedObject var toastManager: ToastManager
+    private let imageCache: ImageCache
     @StateObject private var authenticationViewModel: AuthenticationViewModel
     @StateObject private var homeViewModel: HomeViewModel
     @StateObject private var productListViewModel: ProductListViewModel
@@ -16,12 +17,14 @@ struct RootView: View {
     init(
         session: SessionStore,
         toastManager: ToastManager,
+        imageCache: ImageCache,
         loginUseCase: LoginUseCaseProtocol,
         fetchCategories: FetchCategoriesUseCaseProtocol,
         fetchProductPage: FetchProductPageUseCaseProtocol
     ) {
         _session = ObservedObject(wrappedValue: session)
         _toastManager = ObservedObject(wrappedValue: toastManager)
+        self.imageCache = imageCache
         _authenticationViewModel = StateObject(
             wrappedValue: .init(
                 loginUseCase: loginUseCase,
@@ -64,11 +67,32 @@ struct RootView: View {
                 }
             }
         }
+        .environment(\.imageCache, imageCache)
         .animation(.easeInOut(duration: 0.3), value: session.isAuthenticated)
         .animation(.easeInOut(duration: 0.25), value: toastManager.toast)
+        .onChange(of: session.isAuthenticated) { isAuthenticated in
+            guard !isAuthenticated else { return }
+            productListViewModel.clearSession()
+        }
+        .task(id: session.notice) {
+            presentSessionNotice()
+        }
         .task(id: toastManager.toast?.id) {
             await dismissToastIfNeeded()
         }
+    }
+
+    private func presentSessionNotice() {
+        guard let notice = session.notice else { return }
+        let message: String
+        switch notice {
+        case .unauthorized:
+            message = AppError.unauthorized.localizedDescription
+        case .keychain:
+            message = AppError.keychain.localizedDescription
+        }
+        session.clearNotice()
+        toastManager.show(message: message, type: .error)
     }
 
     private func dismissToastIfNeeded() async {

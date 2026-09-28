@@ -11,7 +11,7 @@ Test kullanıcısı (DummyJSON): `emilys` / `emilyspass`
 Katmanlar:
 
 - **Presentation:** `AuthenticationView` / `AuthenticationViewModel`, `HomeView` / `HomeViewModel`, `ProductListView` / `ProductListViewModel`, `MainTabView`. ViewModel ekran durumunu tutar: form, yükleniyor, toast, sekme dönüşünde listeyi koruma.
-- **Domain:** `Product`, `ProductPage` ve `ProductCategory` API’den bağımsız varlıklardır; `Decodable` değildir. `LoginUseCase` boş alanı keser, kullanıcı adını kırpar, repository’ye yazar ve `SessionStore.completeLogin()` çağırır. `ProductPagination` sayfa boyu, `skip`, tekrarlayan id ve `hasMore` kararını verir; `FetchProductPageUseCase` bunu repository’ye uygular. `FetchCategoriesUseCase` listeyi `Catalog.prepare` ile kurar: boş slug veya ad düşer, http(s) olmayan adres düşer, aynı slug tekrar etmez, ad sırasına dizilir. `SessionStore` oturumun tek kaynağıdır.
+- **Domain:** `Product`, `ProductPage` ve `ProductCategory` API’den bağımsız varlıklardır; `Decodable` değildir. `LoginUseCase` boş alanı keser, kullanıcı adını kırpar, repository’ye yazar ve `SessionStore.completeLogin()` çağırır. `ProductPagination` sayfa boyu, `skip`, tekrarlayan id ve `hasMore` kararını verir; `FetchProductPageUseCase` bunu repository’ye uygular. `FetchCategoriesUseCase` listeyi `Catalog.prepare` ile kurar: boş slug veya ad düşer, http(s) olmayan adres düşer, aynı slug tekrar etmez, ad sırasına dizilir. `SessionStore` oturumun tek kaynağıdır. Toast bilmez; `SessionNotice` yayınlar.
 - **Data:** `AuthRepository`, `CatalogRepository`, `ProductRepository`. `ProductDTO`, `ProductPageDTO` ve `ProductCategoryDTO` DummyJSON cevabını çözer ve alan alan domain varlığına çevirir. Repository HTTP ve Keychain bilir; sayfa birleştirmez, kategori elemez.
 - **Core:** `APIClient`, `AuthRequestInterceptor`, `KeychainService`, `AppError`
 
@@ -21,8 +21,8 @@ Bağımlılıklar protokol üzerinden `AppContainer` içinde enjekte edilir. Vie
 
 ## Durum Yönetimi
 
-- `SessionStore`, `AuthenticationViewModel`, `HomeViewModel` ve `ProductListViewModel`: `@StateObject` / `@ObservedObject`. Session uygulama ömrü boyunca `AppContainer`’dadır. View model’ler `RootView`’de `@StateObject` ile yaratılır. Sekme değişince ürün sayfası ve yüklenmiş liste korunur; `loadInitial` liste doluysa yeniden istek atmaz.
-- `ToastManager`: `@ObservedObject`. Önceki sürümde toast `AppContainer` üzerinden okunuyordu ve SwiftUI invalidation kaçırıyordu.
+- `SessionStore`, `AuthenticationViewModel`, `HomeViewModel` ve `ProductListViewModel`: `@StateObject` / `@ObservedObject`. Session uygulama ömrü boyunca `AppContainer`’dadır. View model’ler `RootView`’de `@StateObject` ile yaratılır. Sekme değişince ürün sayfası ve yüklenmiş liste korunur; `loadInitial` liste doluysa yeniden istek atmaz. Çıkış ve 401 `isAuthenticated`’ı kapatınca `clearSession()` listeyi, `hasMore` ve yükleme bayraklarını sıfırlar. Sonraki giriş birinci sayfayı yeniden çeker.
+- `ToastManager`: `@ObservedObject`. Önceki sürümde toast `AppContainer` üzerinden okunuyordu ve SwiftUI invalidation kaçırıyordu. Oturum olayını `RootView` dinler: `session.notice` doluysa toast basar ve notice’ı temizler. Açılışta süresi dolmuş token, view görünmeden notice olarak kalır; `.task(id:)` ilk çizimde onu gösterir.
 - Form alanları `@Published`; token asla `@Published` / `AppStorage` / `UserDefaults` değil.
 
 ## Arayüz
@@ -35,7 +35,7 @@ Renkler `AppColor`, yazı, boşluk, köşe ve ortak yüzeyler `AppStyle` içinde
 
 - Dedicated `URLSessionConfiguration`: 30s request / 60s resource timeout, `waitsForConnectivity = false`
 - `HTTPDataLoading` protokolü session’ı soyutlar
-- `AuthRequestInterceptor` korumalı isteğe `Authorization: Bearer` ekler
+- `AuthRequestInterceptor` korumalı isteğe `Authorization: Bearer` ekler. Token yoksa veya JWT `exp` geçmişse istek ağa çıkmaz; `unauthorized` olur ve oturum kapanır
 - Login `authenticated: false` gider; eski token login’e yapışmaz
 - `APIClient` istek/yanıtı loglamaz; hata `AppError` enum’una map edilir (token string’i yok)
 
@@ -45,8 +45,8 @@ Renkler `AppColor`, yazı, boşluk, köşe ve ortak yüzeyler `AppStyle` içinde
 2. `accessToken` Keychain’e yazılır (`kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, service `com.MineRala.E-Marketing`). Güncellemede silme sorgusu yalnız servis ve hesap kullanır; eski token farklı olsa da kayıt değişir. `refreshToken` giriş gövdesinde çözülür, loga yazılmaz ve Keychain’e konmaz. Dokümanda yenileme ucu yoktur; kullanılmayan bir sır saklanmaz.
 3. `LoginResponse` Presentation’a dönmez; repository token’ı kaydeder ve biter
 4. `SessionStore.completeLogin()` → Home
-5. Cold start: Keychain’de token varsa Home
-6. Çıkış Yap / 401: Keychain silinir, Auth’a dönüş
+5. Cold start: Keychain’de token varsa ve `exp` geçmemişse Home. `exp` okunamıyorsa token geçerli sayılır. `exp` geçmişse Keychain silinir, giriş ekranı açılır
+6. Çıkış Yap / 401 / süresi dolmuş token: Keychain silinirse ürün listesi sıfırlanır ve Auth’a dönülür. Çıkışta silme başarısızsa oturum açık kalır; `SessionStore` `.keychain` yayınlar, toast’ı `RootView` basar
 
 Korumalı uçta 401: interceptor’sız status map → `AppError.unauthorized` → `UnauthorizedDispatcher.notify()` isteğin kendi task’ı içinde `MainActor`’a geçer → `SessionStore.handleUnauthorized()`. Ayrı bir `Task` açılmaz. Login 401’i `invalidCredentials`’tır, oturumu kapatmaz. Korumalı 401 oturumu kapatır.
 
@@ -54,9 +54,9 @@ Korumalı uçta 401: interceptor’sız status map → `AppError.unauthorized` �
 
 ## Sayfalama
 
-Ürünler sekmesi `GET /auth/products?limit=&skip=` kullanır. Sayfa boyu, `skip` ve listenin bitip bitmediği `ProductPagination` içindedir. `skip`, eldeki ürün sayısıdır. Gelen sayfadaki tekrarlayan id’ler eklenmez. İlk sayfada `hasMore`, `count < total` iken açıktır. Sonraki sayfada yeni ürün yoksa veya toplam dolmuşsa kapanır.
+Ürünler sekmesi `GET /auth/products?limit=&skip=` kullanır. Sayfa boyu, `skip` ve listenin bitip bitmediği `ProductPagination` içindedir. Sonraki `skip`, istenen ofset artı cevaptaki ham kayıt sayısıdır. Tekrarlayan id listeye eklenmez ama ofseti geri çekmez; aksi halde aradaki pencere atlanır. Ham sayfa boşsa veya ofset `total`’a ulaştıysa `hasMore` kapanır. Sayfanın tamamı tekrar olsa bile ofset ilerler.
 
-ViewModel bu kararı vermez. Yalnızca aynı anda tek isteği (`isLoading` / `isLoadingNextPage`) ve sekme dönüşünde dolu listenin yeniden çekilmemesini tutar. Listenin sonundaki sentinel `List` içinde lazy durur; görünmeden istek atılmaz.
+ViewModel bu kararı vermez. Yalnızca aynı anda tek isteği (`isLoading` / `isLoadingNextPage`), sekme dönüşünde dolu listenin yeniden çekilmemesini ve `nextSkip` imlecini tutar. Sonraki sayfa hata verirse toast basılır, yüklenen ürünler durur ve sentinel’de yeniden dene görünür. `.task` kimliği ürün sayısı ile deneme sayısıdır; buton denemeyi artırınca aynı ofset yeniden istenir. Oturum kapanınca `clearSession()` nesli artırır; o nesille başlamış uçuştaki sayfa listeye yazılmaz ve toast üretmez. Listenin sonundaki sentinel `List` içinde lazy durur; görünmeden istek atılmaz.
 
 ## Hata Yönetimi
 
@@ -67,7 +67,7 @@ Hata katmanlar arasında `AppError` olarak yürür. View ham `URLError` veya HTT
 3. ViewModel (`AuthenticationViewModel`, `HomeViewModel`, `ProductListViewModel`) `AppError`’ı yakalar ve `localizedDescription` ile toast gösterir. Tanınmayan hata `unknown` olur.
 4. `CancellationError` toast üretmez. Boş kullanıcı adı veya şifre `LoginCredentials` içinde kesilir; buton `canSubmit` ile kapalıdır, istek ve toast yoktur.
 
-Korumalı istekte 401 ayrıdır: `APIClient` status’u `unauthorized` yapar ve fırlatmadan önce, isteğin kendi task’ı içinde `SessionStore.handleUnauthorized()` çağırır. Oturum kapanır ve toast’ı `SessionStore` basar. Login 401’i `invalidCredentials`’tır; ViewModel toast basar, oturum açılmaz. Çıkışta Keychain silinemezse toast’ı yine `SessionStore` basar.
+Korumalı istekte 401 ayrıdır: `APIClient` status’u `unauthorized` yapar ve fırlatmadan önce, isteğin kendi task’ı içinde `SessionStore.handleUnauthorized()` çağırır. Oturum kapanır ve `SessionNotice.unauthorized` yayınlanır; toast’ı `RootView` basar. ViewModel’ler `.unauthorized` görünce toast basmaz, mesaj iki kez çıkmaz. Login 401’i `invalidCredentials`’tır; ViewModel toast basar, oturum açılmaz. Çıkışta Keychain silinemezse notice `.keychain` kalır, unauthorized’ın üzerine yazılmaz ve oturum açık kalır.
 
 `NetworkErrorMapper` eşlemesi:
 
@@ -91,9 +91,9 @@ Toast metni `AppError.errorDescription` üzerinden lokalize edilir.
 
 Auth kapsamında: token bellek cache’lenmez, her korumalı istekte Keychain okunur (sızıntı yüzeyi küçük). Ana sayfada kampanyalar yereldir; kategoriler `LazyVGrid` içindedir. Ürün listesi `List` kullanır ve satır `Equatable` olduğu için aynı ürün yeniden çizilmez.
 
-Küçük resim `CachedAsyncImage` + `ImageCache` ile yüklenir. Akış: bellek (`NSCache`, en fazla 200 görsel) → Caches altındaki dosya klasörü (100 MB, en eski dosya silinir) → ağ. Dosya adı UUID’dir. Adres ile bu ad `index.json` içinde eşlenir; uygulama yeniden açılınca aynı dosya bulunur. Swift’in `hashValue` değeri her açılışta değiştiği için disk adı olamaz. Sunucu `no-store` gönderse de ikinci istek ağa gitmez. Ürün satırı görseli 76 puntodur. `ImageIO` tam kareyi belleğe almadan en uzun kenarı `76 × ekran ölçeği` piksel olan küçük resim üretir. Diskte orijinal bayt durur; belleğe giren görsel hücre boyutundadır. İstek `async`’tir. Hücre kaybolunca `.task` iptal olur, görünmeyen görsel indirilmeye devam etmez. Kingfisher’ın bu ekranda karşılayacağı ek davranış (placeholder pipeline, prefetch, processor) yok. Bu yüzden bağımlılık eklenmedi.
+Küçük resim `CachedAsyncImage` + `ImageCache` ile yüklenir. Önbelleği `AppContainer` yaratır; `RootView` onu environment ile verir. Akış: bellek (`NSCache`, en fazla 200 görsel) → Caches altındaki dosya klasörü (100 MB, en eski dosya silinir) → ağ. Dosya adı UUID’dir. Adres ile bu ad `index.json` içinde eşlenir; uygulama yeniden açılınca aynı dosya bulunur. Swift’in `hashValue` değeri her açılışta değiştiği için disk adı olamaz. Sunucu `no-store` gönderse de ikinci istek ağa gitmez. Ürün satırı görseli 76 puntodur. `ImageIO` tam kareyi belleğe almadan en uzun kenarı `76 × ekran ölçeği` piksel olan küçük resim üretir. Diskte orijinal bayt durur; belleğe giren görsel hücre boyutundadır. İstek `async`’tir. Hücre kaybolunca `.task` iptal olur, görünmeyen görsel indirilmeye devam etmez. Kingfisher’ın bu ekranda karşılayacağı ek davranış (placeholder pipeline, prefetch, processor) yok. Bu yüzden bağımlılık eklenmedi.
 
-Login ve toast kapanışı SwiftUI `.task(id:)` ile çalışır. Yeni toast veya ekranın kapanması önceki beklemeyi iptal eder. `Button { Task { } }` kullanılmaz.
+Login, oturum notice’ı ve toast kapanışı SwiftUI `.task(id:)` ile çalışır. Yeni toast veya ekranın kapanması önceki beklemeyi iptal eder. `Button { Task { } }` kullanılmaz.
 
 ## Test
 
@@ -114,7 +114,7 @@ Dosya: `E-MarketingTests/Presentation/AuthenticationViewModelTests.swift`. Repos
 | Hatalı giriş | `testFailedLoginShowsErrorAndDoesNotAuthenticate` |
 | Token saklama | Aynı başarı testi: `repository.token == "stored-token"`, oturum açılır, şifre temizlenir |
 
-`HomeViewModelTests`: kategori başarı ve hata. `ProductListViewModelTests`: ilk sayfa, sonraki sayfa, liste sonu, eşzamanlı ikinci isteğin yutulması, sekme dönüşünde yeniden çekmeme, hata toast’ı.
+`HomeViewModelTests`: kategori başarı ve hata. `ProductListViewModelTests`: ilk sayfa, sonraki sayfa, liste sonu, eşzamanlı ikinci isteğin yutulması, sekme dönüşünde yeniden çekmeme, çıkışta listeyi silip yeniden çekme, uçuştaki sayfanın düşürülmesi, sonraki sayfa hatasında aynı ofseti yeniden deneme, tekrarlayan id’de sunucu ofseti, hata toast’ı.
 
 Boş kullanıcı adı veya boş şifrede `canSubmit` false kalır; istek ve toast yok. Buton bu durumda kapalıdır.
 
@@ -125,7 +125,7 @@ Boş kullanıcı adı veya boş şifrede `canSubmit` false kalır; istek ve toas
 | Senaryo | Test |
 |---|---|
 | Başarılı yanıt | `APIClientTests.testSuccessfulJSONResponse`, `AuthRepositoryTests.testLoginSavesAccessTokenAndDoesNotSendBearer` |
-| 401 | `APIClientTests.testUnauthorizedOnProtectedRequestNotifiesSession` (oturum kapanır), `testLogin401DoesNotNotifySession` (hatalı giriş, oturum açık kalmaz) |
+| 401 | `APIClientTests.testUnauthorizedOnProtectedRequestNotifiesSession` (oturum kapanır), `testMissingTokenDoesNotReachTheNetwork` (token yokken istek çıkmaz), `testLogin401DoesNotNotifySession` (hatalı giriş, oturum açık kalmaz) |
 | Zaman aşımı | `APIClientTests.testTimeoutMapsToTimeoutError` |
 | Hatalı format | `APIClientTests.testMalformedJSONMapsToDecoding` |
 
@@ -148,6 +148,7 @@ Dosyalar: `AuthenticationUITests`, `HomeUITests`, `ProductListUITests`. Launch a
 | Sekme dönüşünde liste durur | `ProductListUITests.testSwitchingTabsKeepsTheLoadedProduct` | Var |
 | Hatalı girişte toast | `testFailedLoginShowsErrorToast` | Var |
 | Kaydırınca sonraki ürün sayfası | `ProductPaginationUITests.testScrollingLoadsTheNextPage` | Var |
+| 401 girişe dönüş | `HTTPErrorUITests.testUnauthorizedResponseReturnsToLogin` | Var |
 | 403 toast | `HTTPErrorUITests.testForbiddenResponseShowsToast` | Var |
 | 404 toast | `HTTPErrorUITests.testNotFoundResponseShowsToast` | Var |
 | 429 toast | `HTTPErrorUITests.testRateLimitedResponseShowsToast` | Var |

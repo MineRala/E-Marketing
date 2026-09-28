@@ -65,6 +65,31 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(unauthorizedCounter.value, 1)
     }
 
+    func testMissingTokenDoesNotReachTheNetwork() async {
+        let client = APIClient(
+            interceptor: RejectingInterceptor(),
+            session: MockHTTP.session(),
+            onUnauthorized: { [unauthorizedCounter] in
+                unauthorizedCounter?.increment()
+            }
+        )
+        MockURLProtocol.handler = { request in
+            XCTFail("Protected request left the device")
+            return MockHTTP.response(url: request.url!, status: 200, json: "{}")
+        }
+
+        do {
+            let _: LoginResponse = try await client.request(URLRequest(url: APIEndpoint.products))
+            XCTFail("Expected unauthorized")
+        } catch let error as AppError {
+            XCTAssertEqual(error, .unauthorized)
+        } catch {
+            XCTFail("Unexpected error \(error)")
+        }
+
+        XCTAssertEqual(unauthorizedCounter.value, 1)
+    }
+
     func testLogin401DoesNotNotifySession() async {
         MockURLProtocol.handler = { request in
             MockHTTP.response(url: request.url!, status: 401, json: #"{"message":"invalid"}"#)
@@ -186,6 +211,12 @@ final class APIClientTests: XCTestCase {
             XCTAssertEqual(error, .rateLimited)
         } catch {
             XCTFail("Unexpected error \(error)")
+        }
+    }
+
+    private struct RejectingInterceptor: RequestInterceptor {
+        func adapt(_ request: URLRequest) throws -> URLRequest {
+            throw AppError.unauthorized
         }
     }
 

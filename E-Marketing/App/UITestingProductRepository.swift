@@ -5,10 +5,19 @@
 
 import Foundation
 
-final class UITestingProductRepository: ProductRepositoryProtocol, Sendable {
+final class UITestingProductRepository: ProductRepositoryProtocol, @unchecked Sendable {
+
+    private let onUnauthorized: @Sendable () async -> Void
+
+    init(onUnauthorized: @escaping @Sendable () async -> Void = {}) {
+        self.onUnauthorized = onUnauthorized
+    }
 
     func fetchProducts(limit: Int, skip: Int) async throws -> ProductPage {
         if let error = UITestingForcedError.current {
+            if error == .unauthorized {
+                await onUnauthorized()
+            }
             throw error
         }
 
@@ -76,6 +85,8 @@ enum UITestingForcedError {
         }
 
         switch arguments[arguments.index(after: flag)] {
+        case "401":
+            return .unauthorized
         case "403":
             return .forbidden
         case "404":

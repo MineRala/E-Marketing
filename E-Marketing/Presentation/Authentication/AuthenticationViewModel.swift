@@ -54,6 +54,7 @@ final class AuthenticationViewModel: ObservableObject {
     }
 
     private func showError(_ error: AppError) {
+        guard error != .unauthorized else { return }
         toastManager.show(
             message: error.localizedDescription,
             type: .error

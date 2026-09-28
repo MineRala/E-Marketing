@@ -31,9 +31,22 @@ final class AuthRequestInterceptorTests: XCTestCase {
         XCTAssertEqual(adapted.value(forHTTPHeaderField: "Authorization"), "Bearer custom")
     }
 
-    func testLeavesRequestUntouchedWhenTokenMissing() throws {
+    func testMissingTokenDoesNotAdaptTheRequest() {
         let interceptor = AuthRequestInterceptor(keychain: InMemoryKeychainStore())
-        let adapted = try interceptor.adapt(URLRequest(url: APIEndpoint.products))
-        XCTAssertNil(adapted.value(forHTTPHeaderField: "Authorization"))
+
+        XCTAssertThrowsError(try interceptor.adapt(URLRequest(url: APIEndpoint.products))) { error in
+            XCTAssertEqual(error as? AppError, .unauthorized)
+        }
+    }
+
+    func testExpiredTokenDoesNotAdaptTheRequest() {
+        let keychain = InMemoryKeychainStore()
+        let expired = JWTFixture.token(exp: 1)
+        try? keychain.save(expired, forKey: AuthStorageKey.accessToken)
+        let interceptor = AuthRequestInterceptor(keychain: keychain)
+
+        XCTAssertThrowsError(try interceptor.adapt(URLRequest(url: APIEndpoint.products))) { error in
+            XCTAssertEqual(error as? AppError, .unauthorized)
+        }
     }
 }

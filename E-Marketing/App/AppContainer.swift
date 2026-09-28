@@ -10,6 +10,7 @@ final class AppContainer {
 
     let session: SessionStore
     let toastManager: ToastManager
+    let imageCache: ImageCache
     let loginUseCase: LoginUseCaseProtocol
     let fetchCategories: FetchCategoriesUseCaseProtocol
     let fetchProductPage: FetchProductPageUseCaseProtocol
@@ -18,19 +19,22 @@ final class AppContainer {
         isUITesting: Bool = ProcessInfo.processInfo.arguments.contains("--ui-testing")
     ) {
         let toastManager = ToastManager()
+        let imageCache = ImageCache()
         self.toastManager = toastManager
+        self.imageCache = imageCache
 
         if isUITesting {
+            let dispatcher = UnauthorizedDispatcher()
             let keychain = InMemoryKeychainStore()
             let repository = UITestingAuthRepository(keychain: keychain)
-            let session = SessionStore(
-                authRepository: repository,
-                toastManager: toastManager
-            )
+            let session = SessionStore(authRepository: repository)
+            dispatcher.session = session
             self.session = session
             self.loginUseCase = LoginUseCase(repository: repository, session: session)
             self.fetchCategories = FetchCategoriesUseCase(repository: UITestingCatalogRepository())
-            self.fetchProductPage = FetchProductPageUseCase(repository: UITestingProductRepository())
+            self.fetchProductPage = FetchProductPageUseCase(
+                repository: UITestingProductRepository(onUnauthorized: { await dispatcher.notify() })
+            )
             session.restore()
             return
         }
@@ -55,10 +59,7 @@ final class AppContainer {
             apiClient: apiClient,
             keychain: keychain
         )
-        let session = SessionStore(
-            authRepository: repository,
-            toastManager: toastManager
-        )
+        let session = SessionStore(authRepository: repository)
         dispatcher.session = session
         self.session = session
         self.loginUseCase = LoginUseCase(repository: repository, session: session)

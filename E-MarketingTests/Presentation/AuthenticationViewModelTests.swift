@@ -18,7 +18,7 @@ final class AuthenticationViewModelTests: XCTestCase {
         super.setUp()
         repository = MockAuthRepository()
         toastManager = ToastManager()
-        session = SessionStore(authRepository: repository, toastManager: toastManager)
+        session = SessionStore(authRepository: repository)
         sut = AuthenticationViewModel(
             loginUseCase: LoginUseCase(repository: repository, session: session),
             toastManager: toastManager

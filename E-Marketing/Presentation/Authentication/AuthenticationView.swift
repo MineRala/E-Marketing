@@ -77,7 +77,7 @@ struct AuthenticationView: View {
                         .background(AppColor.accentGradient)
                         .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
                     }
-                    .buttonStyle(LoginButtonStyle())
+                    .buttonStyle(.plain)
                     .disabled(!viewModel.canSubmit || viewModel.isLoading)
                     .opacity(viewModel.canSubmit ? 1 : 0.4)
                     .padding(.top, 4)
@@ -114,11 +114,5 @@ struct AuthenticationView: View {
         .appField()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(prompt)
-    }
-}
-
-private struct LoginButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
     }
 }

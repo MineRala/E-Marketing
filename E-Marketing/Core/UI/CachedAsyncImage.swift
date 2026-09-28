@@ -10,6 +10,7 @@ struct CachedAsyncImage: View {
     let url: URL?
     var pointSize: CGSize
 
+    @Environment(\.imageCache) private var imageCache
     @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
 
@@ -24,7 +25,7 @@ struct CachedAsyncImage: View {
             }
         }
         .task(id: Request(url: url, pointSize: pointSize)) {
-            image = await ImageCache.shared.image(
+            image = await imageCache.image(
                 for: url,
                 pointSize: pointSize,
                 scale: displayScale
@@ -35,5 +36,16 @@ struct CachedAsyncImage: View {
     private struct Request: Equatable {
         let url: URL?
         let pointSize: CGSize
+    }
+}
+
+private struct ImageCacheKey: EnvironmentKey {
+    static let defaultValue = ImageCache()
+}
+
+extension EnvironmentValues {
+    var imageCache: ImageCache {
+        get { self[ImageCacheKey.self] }
+        set { self[ImageCacheKey.self] = newValue }
     }
 }

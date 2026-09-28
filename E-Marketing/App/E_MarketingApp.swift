@@ -15,6 +15,7 @@ struct E_MarketingApp: App {
             RootView(
                 session: container.session,
                 toastManager: container.toastManager,
+                imageCache: container.imageCache,
                 loginUseCase: container.loginUseCase,
                 fetchCategories: container.fetchCategories,
                 fetchProductPage: container.fetchProductPage

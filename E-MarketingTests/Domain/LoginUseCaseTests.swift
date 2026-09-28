@@ -16,7 +16,7 @@ final class LoginUseCaseTests: XCTestCase {
     override func setUp() {
         super.setUp()
         repository = MockAuthRepository()
-        session = SessionStore(authRepository: repository, toastManager: ToastManager())
+        session = SessionStore(authRepository: repository)
         sut = LoginUseCase(repository: repository, session: session)
     }
 

@@ -12,7 +12,7 @@ protocol KeychainServiceProtocol: Sendable {
     func delete(forKey key: String) throws
 }
 
-final class KeychainService: KeychainServiceProtocol, @unchecked Sendable {
+final class KeychainService: KeychainServiceProtocol, Sendable {
 
     private let service = "com.MineRala.E-Marketing"
 

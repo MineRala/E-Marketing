@@ -73,7 +73,7 @@ final class ProductListViewModelTests: XCTestCase {
         }
 
         let first = Task { await self.sut.loadNextIfNeeded() }
-        let started = await waitUntil { self.sut.isLoadingNextPage }
+        let started = await waitUntil { continuation != nil }
         XCTAssertTrue(started)
 
         await sut.loadNextIfNeeded()
@@ -93,8 +93,95 @@ final class ProductListViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.products.map(\.id), [1, 2])
         XCTAssertTrue(sut.hasMore)
+        XCTAssertTrue(sut.nextPageDidFail)
         XCTAssertFalse(sut.isLoadingNextPage)
         XCTAssertEqual(toastManager.toast?.message, AppError.network.localizedDescription)
+    }
+
+    func testRetryNextPageFetchesTheSameServerOffset() async {
+        repository.pages = [
+            page(ids: [1, 2], total: 4, skip: 0),
+            page(ids: [3, 4], total: 4, skip: 2),
+            page(ids: [3, 4], total: 4, skip: 2)
+        ]
+        await sut.loadInitial()
+
+        repository.error = AppError.network
+        await sut.loadNextIfNeeded()
+        XCTAssertTrue(sut.nextPageDidFail)
+        XCTAssertEqual(repository.calls.map(\.skip), [0, 2])
+
+        repository.error = nil
+        sut.retryNextPage()
+        XCTAssertFalse(sut.nextPageDidFail)
+        XCTAssertEqual(sut.nextPageAttempt, 1)
+
+        await sut.loadNextIfNeeded()
+
+        XCTAssertEqual(sut.products.map(\.id), [1, 2, 3, 4])
+        XCTAssertEqual(repository.calls.map(\.skip), [0, 2, 2])
+        XCTAssertFalse(sut.nextPageDidFail)
+        XCTAssertFalse(sut.hasMore)
+    }
+
+    func testNextPageSkipFollowsServerOffsetWhenIDsRepeat() async {
+        repository.pages = [
+            page(ids: [1, 2], total: 6, skip: 0),
+            page(ids: [2, 3], total: 6, skip: 2),
+            page(ids: [4, 5], total: 6, skip: 4)
+        ]
+
+        await sut.loadInitial()
+        await sut.loadNextIfNeeded()
+        await sut.loadNextIfNeeded()
+
+        XCTAssertEqual(sut.products.map(\.id), [1, 2, 3, 4, 5])
+        XCTAssertEqual(repository.calls.map(\.skip), [0, 2, 4])
+        XCTAssertFalse(sut.hasMore)
+    }
+
+    func testClearSessionDropsProductsAndAllowsAFreshFirstPage() async {
+        repository.pages = [
+            page(ids: [1, 2], total: 4, skip: 0),
+            page(ids: [9], total: 1, skip: 0)
+        ]
+        await sut.loadInitial()
+
+        sut.clearSession()
+
+        XCTAssertTrue(sut.products.isEmpty)
+        XCTAssertTrue(sut.hasMore)
+        XCTAssertFalse(sut.didFail)
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertFalse(sut.isLoadingNextPage)
+
+        await sut.loadInitial()
+
+        XCTAssertEqual(sut.products.map(\.id), [9])
+        XCTAssertEqual(repository.calls.count, 2)
+    }
+
+    func testClearSessionDiscardsInFlightNextPage() async {
+        repository.pages = [page(ids: [1], total: 3, skip: 0)]
+        await sut.loadInitial()
+
+        var continuation: CheckedContinuation<ProductPage, Error>?
+        repository.onFetch = {
+            try await withCheckedThrowingContinuation { continuation = $0 }
+        }
+
+        let next = Task { await self.sut.loadNextIfNeeded() }
+        let started = await waitUntil { continuation != nil }
+        XCTAssertTrue(started)
+
+        sut.clearSession()
+        continuation?.resume(returning: page(ids: [2], total: 3, skip: 1))
+        await next.value
+
+        XCTAssertTrue(sut.products.isEmpty)
+        XCTAssertTrue(sut.hasMore)
+        XCTAssertFalse(sut.isLoadingNextPage)
+        XCTAssertNil(toastManager.toast)
     }
 
     func testInitialFailureShowsToast() async {

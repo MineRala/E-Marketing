@@ -5,26 +5,45 @@
 
 import Foundation
 
+enum SessionNotice: Equatable {
+    case unauthorized
+    case keychain
+}
+
 @MainActor
 final class SessionStore: ObservableObject {
 
     @Published private(set) var isAuthenticated = false
+    @Published private(set) var notice: SessionNotice?
 
     private let authRepository: AuthRepositoryProtocol
-    private let toastManager: ToastManager
+    private let now: () -> Date
 
     init(
         authRepository: AuthRepositoryProtocol,
-        toastManager: ToastManager
+        now: @escaping () -> Date = Date.init
     ) {
         self.authRepository = authRepository
-        self.toastManager = toastManager
+        self.now = now
+    }
+
+    func clearNotice() {
+        notice = nil
     }
 
     func restore() {
         do {
-            let token = try authRepository.getAccessToken()
-            isAuthenticated = !(token?.isEmpty ?? true)
+            guard let token = try authRepository.getAccessToken(), !token.isEmpty else {
+                isAuthenticated = false
+                return
+            }
+            if AccessTokenExpiry.isExpired(token, at: now()) {
+                try? authRepository.logout()
+                isAuthenticated = false
+                notice = .unauthorized
+                return
+            }
+            isAuthenticated = true
         } catch {
             isAuthenticated = false
         }
@@ -38,10 +57,8 @@ final class SessionStore: ObservableObject {
         do {
             try authRepository.logout()
         } catch {
-            toastManager.show(
-                message: AppError.keychain.localizedDescription,
-                type: .error
-            )
+            notice = .keychain
+            return
         }
         isAuthenticated = false
     }
@@ -49,9 +66,7 @@ final class SessionStore: ObservableObject {
     func handleUnauthorized() {
         guard isAuthenticated else { return }
         logout()
-        toastManager.show(
-            message: AppError.unauthorized.localizedDescription,
-            type: .error
-        )
+        guard !isAuthenticated else { return }
+        notice = .unauthorized
     }
 }

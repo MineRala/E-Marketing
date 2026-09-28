@@ -160,7 +160,7 @@ Xcode’da `E-Marketing` scheme → Test.
 
 - 401’de sessiz yenileme. O uç eklenirse refresh token Keychain’e yazılır. Doküman bu ucu istemez; şu an 401 oturumu kapatır.
 - Keychain access group / iCloud sync kapalı tutuldu; production’da biometric unlock ayrı karar
-- Satır yüksekliği değişirse küçük resim ölçüsü yeniden verilir; şu an 76 punto
+- Küçük resim 76 puntodur (`AppStyle.Size.thumbnail`). Görselin çerçeve ölçüsü değişirse bu sabit de değişir; ImageIO o puntoyla küçültür. Satırın yazı ve boşluğu bu ölçüyü belirlemez. Girişteki logo da aynı sabiti kullanır
 - Structured logging (os.Logger) PII redaction ile; crash reporter’a request header scrub
 - Ürün detay ekranı (doküman istemiyor)
 - Certificate pinning (DummyJSON için gerekmez; production API’de)
